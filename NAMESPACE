@@ -1,2 +1,4 @@
 import(methods)
-export(populate, createTable, mergeStatement, insertStatement, TableSchemaList,s earchCols, searchDict, searchTables)
+export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length)
+#searchCols, searchDict, searchTables,
+exportClass(TableSchemaList)

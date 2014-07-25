@@ -50,12 +50,39 @@ valid.TableSchemaList <- function(object)
     }
 }
 
-setClass(Class="TableSchemaList", representation=list(tab.list="list", search.cols="list"), prototype=prototype(tab.list=default.tab.list(), search.cols=default.search.cols()), validity=valid.TableSchemaList)
+setClass(Class="TableSchemaList", representation=list(tab.list="list", search.cols="list"), prototype=prototype(tab.list=list(), search.cols=list()), validity=valid.TableSchemaList)
+
+#need to fix me...
+TableSchemaList <- function(tab.list=NULL, search.cols=NULL)
+{
+    return(new("TableSchemaList", tab.list=tab.list, search.cols=search.cols))
+}
 
 setMethod("show", signature("TableSchemaList"), function(object)
           {
-                message("An object of class TableSchemaList")
+                message(paste("TableSchemaList of length", length(object)))
           })
+
+#may need to use BiocGenerics at some point...
+#setGeneric("append", def=function(x, values, after) standardGeneric("append"))
+setMethod("append", signature("TableSchemaList", "TableSchemaList"), function(x, values, after=length(x))
+	  {
+		 lengx <- length(x)
+		    
+		    if (!after) 
+			return(new("TableSchemaList", tab.list=c(values@tab.list, x@tab.list)))
+		    else if (after >= lengx) 
+			return(new("TableSchemaList", tab.list=c(x@tab.list, values@tab.list)))
+		    else return(new("TableSchemaList", tab.list=c(x@tab.list[1L:after], values@tab.list, x@tab.list[(after + 1L):lengx])))
+		
+	  })
+
+#setGeneric("length", def=function(x), standardGeneric("length"))
+setMethod("length", signature("TableSchemaList"), function(x)
+	  {
+		return(length(x@tab.list))
+	  })
+
 
 setMethod("subset", signature("TableSchemaList"), function(x, table.name)
           {
@@ -66,6 +93,87 @@ setMethod("subset", signature("TableSchemaList"), function(x, table.name)
             
             return(new("TableSchemaList", tab.list=x@tab.list[table.name]))
           })
+
+setGeneric("makeSchemaFromData", def=function(obj, ...) standardGeneric("makeSchemaFromData"))
+setMethod("makeSchemaFromData", signature("data.frame"), function(obj, name=NULL, primary.cols=NULL)
+          {
+            if (missing(name) || is.null(name) || is.na(name))
+            {
+                stop("ERROR: Please supply a name for the table")
+            }
+            
+            cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func=function(x) x, should.ignore=T, foreign.keys=NULL)
+            
+            if (missing(primary.cols) || is.null(primary.cols) || is.na(primary.cols))
+            {
+                cur.list$db.constr <- ""
+                cur.list$db.cols <- paste0(name, "_ind")
+                cur.list$db.schema <- "INTEGER PRIMARY KEY AUTOINCREMENT"
+            }
+            else if (is.character(primary.cols) && is.null(names(obj)) == F && all(primary.cols %in% names(obj)))
+            {
+                cur.list$db.constr <- paste0("CONSTRAINT ", name, "_idx UNIQUE (", paste(primary.cols, collapse=",") ,")")
+            }
+            else
+            {
+                stop("ERROR: primary.cols needs to be NULL or a character vector corresponding to the names of obj")
+            }
+            
+            cur.list$db.cols <- append(cur.list$db.cols, names(obj))
+            
+            cur.list$db.schema <- append(cur.list$db.schema, determine.db.types(obj))
+            
+            tab.list <- list(cur.list)
+            names(tab.list) <- name
+            
+            return(new("TableSchemaList", tab.list=tab.list))
+          })
+
+
+character.to.type <- function(val.class)
+{
+    char.val <- as.character(val.class)
+    
+    exist.nas <- sum(is.na(char.val))
+    is.numeric.type <- suppressWarnings(as.numeric(char.val))
+    
+    if (sum(is.na(is.numeric.type)) > exist.nas)
+    {
+        return("TEXT")
+    }
+    else
+    {
+        if(any(grepl("\\d*\\.\\d*",char.val)))
+        {
+            return("NUMERIC")
+        }
+        else
+        {
+            return("INTEGER")
+        }
+    }
+}
+
+basic.integer <- function(x)
+{
+    return("INTEGER")
+}
+
+
+basic.text <- function(x)
+{
+    return("TEXT")
+}
+
+determine.db.types <- function(dta)
+{
+    return(sapply(names(dta), function(x)
+           {
+                return(switch(class(dta[,x]), character=basic.text, factor=character.to.type,
+                    numeric=character.to.type, integer=basic.integer, basic.text)(dta[,x]))
+           }))
+}
+
 
 return.element <- function(use.obj, name)
 {
@@ -147,7 +255,7 @@ setMethod("populate", signature("TableSchemaList"), function(obj, db.con,ins.val
         }
         
     }
-}
+})
 
 setGeneric("searchTables", def=function(obj, ...) standardGeneric("searchTables"))
 setMethod("searchTables", signature("TableSchemaList"), function(obj, name)
