@@ -102,7 +102,7 @@ setMethod("makeSchemaFromData", signature("data.frame"), function(obj, name=NULL
                 stop("ERROR: Please supply a name for the table")
             }
             
-            cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func=function(x) x, should.ignore=T, foreign.keys=NULL)
+            cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func= eval(parse(text=paste0("function(x) x[['",name,"']]"))), should.ignore=T, foreign.keys=NULL)
             
             if (missing(primary.cols) || is.null(primary.cols) || is.na(primary.cols))
             {
@@ -128,7 +128,6 @@ setMethod("makeSchemaFromData", signature("data.frame"), function(obj, name=NULL
             
             return(new("TableSchemaList", tab.list=tab.list))
           })
-
 
 character.to.type <- function(val.class)
 {
@@ -183,6 +182,8 @@ return.element <- function(use.obj, name)
 setGeneric("populate", def=function(obj, ...) standardGeneric("populate"))
 setMethod("populate", signature("TableSchemaList"), function(obj, db.con,ins.vals=NULL, use.tables=NULL, should.debug=FALSE)
 {
+    db.schema <- obj
+    
     if (class(db.con) != "SQLiteConnection")
     {
         stop("ERROR: db.con needs to be of class SQLiteConnection")
@@ -534,3 +535,117 @@ setMethod("insertStatement", signature("TableSchemaList"), function(obj, table.n
                 return(paste("INSERT",ignore.str,"INTO", tableName(obj, table.name, table.mode), "VALUES (", paste(paste0(":", use.cols), collapse=","), ")"))
           })
 
+get.model.side <- function(form, side=c("left", "right"))
+{    
+    side <-  match.arg(side)
+    
+    char.form <- as.character(form)
+    
+    if (length(char.form) == 3)
+    {
+        use.ind <- switch(side, right=3, left=2)
+        
+        split.lhs <- strsplit(char.form[use.ind], "\\s+\\+\\s+")[[1]]
+        return(split.lhs)
+    }
+    else
+    {
+        stop("ERROR: Unexpected parsing for input formula")
+    }
+}
+
+
+
+rhs <- function(form)
+{
+    get.model.side(form, "right")
+}
+
+lhs <- function(form)
+{
+    get.model.side(form, "left")
+}
+
+setGeneric("relationship<-", def=function(obj, from, to, value) standardGeneric("relationship<-"))
+setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, from, to, value)
+                 {
+                   
+                    #check to be sure 'from' comes before 'to'
+                    
+                    from.pos <- which(names(obj@tab.list) == from)
+                    to.pos <-  which(names(obj@tab.list) == to)
+                    
+                    if (to.pos <= from.pos)
+                    {
+                        stop("ERROR: The 'from' table needs to be specified before the 'to' table")
+                    }
+                    
+                    cur.lhs <- lhs(value)
+                    cur.rhs <- rhs(value)
+                    
+                    if (cur.lhs == ".")
+                    {
+                        #check to see if there is an auto-incremented primary key for from
+                        which.prim <- which(obj@tab.list[[from]]$db.schema == "INTEGER PRIMARY KEY AUTOINCREMENT")
+                        if (length(which.prim) == 1)
+                        {
+                            cur.lhs <- obj@tab.list[[from]]$db.cols[which.prim]
+                        }
+                        else
+                        {
+                            stop("ERROR: Can't specify '.' in the formula when a autoincremented primary key is not available")
+                        }
+                    }
+                    else
+                    {
+                        #check to be sure that the values are in from
+                        if (all(cur.lhs %in% obj@tab.list[[from]]$db.cols) == F)
+                        {
+                            stop("ERROR: All values on the lhs of the formula need to be in the 'from' table's columns")
+                        }
+                    }
+                    
+                    #check to be sure that the values are in to
+                    if (all(cur.rhs %in% obj@tab.list[[to]]$db.cols) == F)
+                    {
+                        stop("ERROR: All values on the rhs of the formula need to be in the 'to' table's columns")
+                    }
+                    
+                    #additionally, they all need to be in from's as well
+                    
+                    if (all(cur.rhs %in% obj@tab.list[[from]]$db.cols) == F)
+                    {
+                        stop("ERROR: All values on the rhs of the formula need to be in the 'from' table's columns")
+                    }
+                
+                    #if everything looks good, then add in the relationships to the to table
+                    
+                    use.fk <- list(list(local.keys=cur.lhs, ext.keys=cur.rhs))
+                    names(use.fk) <- from
+                    
+                    if (is.null(obj@tab.list[[to]]$foreign.keys))
+                    {
+                        obj@tab.list[[to]]$foreign.keys <- use.fk
+                    }
+                    else
+                    {
+                        obj@tab.list[[to]]$foreign.keys <- append(obj@tab.list[to]$foreign.keys, use.fk)
+                    }
+                    
+                    #also modify db.cols and db.schema to reflect the new keys/relationships
+                    
+                    which.rhs <- which(obj@tab.list[[to]]$db.cols %in% cur.rhs)
+                    obj@tab.list[[to]]$db.cols <- obj@tab.list[[to]]$db.cols[-which.rhs]
+                    obj@tab.list[[to]]$db.schema <- obj@tab.list[[to]]$db.schema[-which.rhs] 
+                    
+                    obj@tab.list[[to]]$db.cols <- append(obj@tab.list[[to]]$db.cols, cur.lhs)
+                    
+                    #add in what the schema is in from, cleaning a little for integer autoincrement
+                    
+                    curm <- match(cur.lhs, obj@tab.list[[from]]$db.cols)
+                    
+                    obj@tab.list[[to]]$db.schema <- append(obj@tab.list[[to]]$db.schema, sapply(strsplit(obj@tab.list[[from]]$db.schema[curm], "\\s+"), "[[", 1))
+                    
+                    validObject(obj)
+                    return(obj)
+                 })

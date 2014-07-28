@@ -1,4 +1,4 @@
 import(methods)
-export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length)
+export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-')
 #searchCols, searchDict, searchTables,
 exportClass(TableSchemaList)
