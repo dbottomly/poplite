@@ -101,6 +101,16 @@ setMethod("makeSchemaFromData", signature("data.frame"), function(obj, name=NULL
             {
                 stop("ERROR: Please supply a name for the table")
             }
+	    
+	    if (is.null(names(obj)))
+	    {
+		stop("ERROR: obj needs to have column names")
+	    }
+	    
+	    if (valid.db.names(names(obj)) == F)
+	    {
+		stop("ERROR: The names of the supplied data.frame need to be modified for the database see correct.df.names")
+	    }
             
             cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func= eval(parse(text=paste0("function(x) x[['",name,"']]"))), should.ignore=T, foreign.keys=NULL)
             
@@ -128,6 +138,26 @@ setMethod("makeSchemaFromData", signature("data.frame"), function(obj, name=NULL
             
             return(new("TableSchemaList", tab.list=tab.list))
           })
+
+correct.df.names <- function(dta)
+{
+    names(dta) <- make.db.names.default(names(dta))
+    return(dta)
+}
+
+valid.db.names <- function(inp.names)
+{
+    conv.names <- make.db.names.default(inp.names)
+
+    if (length(setdiff(inp.names, conv.names)) > 0)
+    {
+	return(FALSE)
+    }
+    else
+    {
+	return(TRUE)
+    }
+}
 
 character.to.type <- function(val.class)
 {
@@ -477,12 +507,11 @@ setMethod("mergeStatement", signature("TableSchemaList"), function(obj, table.na
                 #table trying to create
                 target.db <- tableName(obj, table.name, mode="normal")
                 
-                target.cols <- colNames(obj, table.name, mode="normal")
+		target.cols <- colNames(obj, table.name, mode="normal")
                 target.schema <- colSchema(obj, table.name, mode="normal")
                 #remove the autoincrement column first
                 target.cols <- target.cols[target.schema != "INTEGER PRIMARY KEY AUTOINCREMENT"]
-                paste.targs <- paste(target.cols, collapse=",")
-                
+		
                 #create the join statement using the foreign.keys slot
                 
                 fk <- return.element(obj, "foreign.keys")[[table.name]]
@@ -496,9 +525,29 @@ setMethod("mergeStatement", signature("TableSchemaList"), function(obj, table.na
                        {
                             return(paste(fk[[y]]$ext.keys, collapse=","))
                        })
-                        
+		
+		
                 join.statement <- paste(paste("JOIN", names(keys), "USING", paste0("(", keys,")")), collapse=" ")
+		
+		#in case columns besides the keys are duplicated, make sure the select statement refers to the appropriate table
                 
+		names(target.cols) <- rep(cur.db, length(target.cols))
+		
+		for(i in names(fk))
+		{
+		    join.tab.cols <- target.cols %in% fk[[i]]$local.keys
+		    
+		    if (any(join.tab.cols))
+		    {
+			names(target.cols)[join.tab.cols] <- i
+		    }
+		}
+		
+		plain.targs <- paste(target.cols, collapse=",")
+		
+		
+		paste.targs <- paste(paste(names(target.cols), target.cols, sep="."), collapse=",")
+		
                 if (shouldIgnore(obj, table.name))
                 {
                     ignore.str <- "OR IGNORE"
@@ -508,7 +557,7 @@ setMethod("mergeStatement", signature("TableSchemaList"), function(obj, table.na
                     ignore.str <- ""
                 }
                 
-                return(paste("INSERT",ignore.str,"INTO", target.db, "(", paste.targs,") SELECT", paste.targs,"FROM", cur.db , join.statement))
+                return(paste("INSERT",ignore.str,"INTO", target.db, "(", plain.targs,") SELECT", paste.targs,"FROM", cur.db , join.statement))
           })
 
 setGeneric("insertStatement", def=function(obj, ...) standardGeneric("insertStatement"))

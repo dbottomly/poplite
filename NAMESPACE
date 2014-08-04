@@ -1,4 +1,9 @@
 import(methods)
+#methods
 export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-')
+
+#other functions
+export(correct.df.names)
+
 #searchCols, searchDict, searchTables,
 exportClass(TableSchemaList)
