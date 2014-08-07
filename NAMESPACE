@@ -1,9 +1,11 @@
 import(methods)
+importFrom(dplyr, filter)
 #methods
-export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-')
+export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-', schema, dbFile,
+tables, columns)
 
 #other functions
-export(correct.df.names)
+export(correct.df.names, Database)
 
 #searchCols, searchDict, searchTables,
-exportClass(TableSchemaList)
+exportClass(TableSchemaList, Database)

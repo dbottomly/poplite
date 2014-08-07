@@ -1,4 +1,33 @@
 
+#interfaces with igraph
+
+#still under construction in test_poplite
+tsl.to.graph <- function(tsl)
+{
+    graph.list <- lapply(tsl@tab.list, function(x)
+           {
+                cur.edges <- unlist(lapply(x$foreign.keys, "[[", "local.keys"))
+                if (is.null(cur.edges))
+                {
+                    return(NULL)
+                }
+                else
+                {
+                    common.col <- intersect(x$db.cols, cur.edges)
+                    use.fk <- sapply(x$foreign.keys, function(x) x$local.keys %in% common.col)
+                    return(names(use.fk)[use.fk == TRUE])
+                }
+           })
+    
+    graph.comp.list <- graph.list[sapply(graph.list, is.null)==F]
+    
+    return(graph.data.frame(stack(graph.comp.list)))
+}
+
+
+
+
+
 #need to add validitity checks to default.search.cols to below function
 valid.TableSchemaList <- function(object)
 {
@@ -209,8 +238,124 @@ return.element <- function(use.obj, name)
     return(sapply(use.obj@tab.list, "[[", name))
 }
 
+
+
+setClass(Class="Database", representation=list(tbsl="TableSchemaList", db.file="character"))
+
+setGeneric("schema", def=function(obj,...) standardGeneric("schema"))
+setMethod("schema", signature("Database"), function(obj)
+	  {
+	    return(obj@tbsl)
+	  })
+
+setGeneric("dbFile", def=function(obj,...) standardGeneric("dbFile"))
+setMethod("dbFile", signature("Database"), function(obj)
+	  {
+	    return(obj@db.file)
+	  })
+
+setGeneric("tables", def=function(obj,...) standardGeneric("tables"))
+setMethod("tables", signature("Database"), function(obj)
+	  {
+	    return(schemaNames(schema(cur.db)))
+	  })
+
+setGeneric("columns", def=function(obj,...) standardGeneric("columns"))
+setMethod("columns", signature("Database"), function(obj)
+	  {
+	    cur.schema <- schema(cur.db)
+	    
+	    ret.list <- lapply(schemaNames(cur.schema), function(x)
+		   {
+			colNames(cur.schema, x)
+		   })
+	    
+	    names(ret.list) <- schemaNames(cur.schema)
+	    
+	    return(ret.list)
+	  })
+
+
+Database <- function(tbsl, db.file)
+{
+    if (class(tbsl) != "TableSchemaList")
+    {
+	stop("ERROR: tbsl needs to be an instance of class TableSchemaList")
+    }
+    
+    if ((is.character(db.file) && length(db.file) == 1)==F)
+    {
+	stop("ERROR: db.file needs to be a single path to a file")
+    }
+    
+    #just want to make sure there is an available DB file...somewhat wasteful
+    if (file.exists(db.file) == F)
+    {
+	temp.con <- dbConnect(SQLite(), db.file)
+	dbDisconnect(temp.con)
+    }
+    
+    return(new("Database", tbsl=tbsl, db.file=db.file))
+}
+
+#still under construction in test_poplite
+setGeneric("filter", def=function(obj, ...) standardGeneric("filter"))
+setMethod("filter", signature("Database"), function(obj, ...)
+	  {
+	    #taken from the internal code of dplyr, the dots() function
+	    use.expr <- eval(substitute(alist(...)))
+	    
+	    if (length(use.expr) != 1)
+	    {
+		stop("ERROR: Please supply a single statement which would result in a logical vector")
+	    }
+	    
+	    .get.var.names <- function(x)
+	    {
+		if (length(x) == 1)
+		{
+		    return(as.character(x))
+		}else{
+		    return(.get.var.names(x[[2]]))
+		}
+	    }
+	    
+	    #look through use.expr to gather all the requested variables
+	    needed.vars <- sapply(use.expr[[1]][-1], function(x)
+		   {
+			.get.var.names(x)
+		   })
+	    
+	    #figure out which tables the requested variables are in
+	    
+	    is.needed.table <- sapply(columns(obj), function(x) any(x %in% needed.vars))
+	    
+	    needed.tables <- names(is.needed.table)[is.needed.table]
+	    
+	    if (length(needed.tables) > 1)
+	    {
+		#use the TBSL object to determine how to join the tables and create a temporary table
+	    }else{
+		my_db <- src_sqlite(dbFile(obj), create = F)
+		my_db_tbl <- tbl(my_db, needed.tables)
+	    }
+	    
+	     #carry out the filter method of dplyr on the temporary or otherwise table
+	    
+	    return(filter(my_db_tbl, ...))
+    })
+
 setGeneric("populate", def=function(obj, ...) standardGeneric("populate"))
-setMethod("populate", signature("TableSchemaList"), function(obj, db.con,ins.vals=NULL, use.tables=NULL, should.debug=FALSE)
+setMethod("populate", signature("Database"), function(obj, ins.vals=NULL, use.tables=NULL, should.debug=FALSE)
+	  {
+	    db.con <- dbConnect(SQLite(), dbFile(obj))
+	    
+	    .populate(schema(obj), db.con, ins.vals=ins.vals, use.tables=use.tables, should.debug=should.debug)
+	    
+	    dbDisconnect(db.con)
+	  })
+
+.populate <- function(obj, db.con,ins.vals=NULL, use.tables=NULL, should.debug=FALSE)
 {
     db.schema <- obj
     
@@ -286,7 +431,7 @@ setMethod("populate", signature("TableSchemaList"), function(obj, db.con,ins.val
         }
         
     }
-})
+}
 
 setGeneric("searchTables", def=function(obj, ...) standardGeneric("searchTables"))
 setMethod("searchTables", signature("TableSchemaList"), function(obj, name)

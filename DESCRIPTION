@@ -5,6 +5,7 @@ Title: Tools for simplifying the population and querying of SQLite databases
 Author: Daniel Bottomly
 Maintainer: Daniel Bottomly <bottomly@ohsu.edu>
 Depends: R (>= 3.1), RSQLite, methods
+Imports: dplyr
 Suggests: RUnit
 Description: Provides object relational mapping (ORM) like objects and accompanying methods which facilitates working with SQLite databases.    
 License: GPL-3
