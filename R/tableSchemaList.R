@@ -24,6 +24,58 @@ tsl.to.graph <- function(tsl)
     return(graph.data.frame(stack(graph.comp.list)))
 }
 
+get.starting.point <- function(tbsl)
+{
+    tsl.graph <- tsl.to.graph(tbsl)
+    sp.mat <- shortest.paths(tsl.graph, mode="out")
+    sp.mat[is.infinite(sp.mat)] <- 0
+    diag(sp.mat) <- NA
+    
+    is.valid <- apply(sp.mat, 1, function(x) all(na.omit(x) > 0))
+    
+    valid.mat <- sp.mat[is.valid,,drop=F]
+    
+    dists <- apply(valid.mat, 1, function(x) sum(na.omit(x)))
+    
+    return(names(dists)[which.min(dists)])
+}
+
+get.shortest.query.path <- function(tbsl, start=NULL, finish=NULL, reverse=TRUE, undirected=TRUE)
+{   
+    tsl.graph <- tsl.to.graph(tbsl)
+    
+    if (missing(finish) || is.null(finish) || is.na(finish))
+    {
+        finish <- V(tsl.graph)
+    }
+    
+    if (undirected)
+    {
+        use.mode <- "all"
+    }else{
+        use.mode <- "out"
+    }
+    
+    table.path <- get.shortest.paths(graph=tsl.graph,from=start,to=finish, mode = use.mode, weights = NULL, output="vpath",predecessors = FALSE, inbound.edges = FALSE)
+    #do it backwards as that is how we want to merge it with the pd tables
+    
+    mask.query <- lapply(table.path$vpath, function(x)
+			 {
+			    if (reverse==TRUE)
+			    {
+				return(rev(V(tsl.graph)[x]$name))
+			    }
+			    else
+			    {
+				return(V(tsl.graph)[x]$name)
+			    }
+			 })
+    
+    
+    
+    return(mask.query)
+}
+
 
 
 
@@ -298,9 +350,60 @@ Database <- function(tbsl, db.file)
     return(new("Database", tbsl=tbsl, db.file=db.file))
 }
 
-#still under construction in test_poplite
-setGeneric("filter", def=function(obj, ...) standardGeneric("filter"))
-setMethod("filter", signature("Database"), function(obj, ...)
+#still under construction, need to deal with multiple tables and possibly outer joins and such
+setGeneric("join", def=function(obj, ...) standardGeneric("join"))
+setMethod("join", signature("Database"), function(obj, needed.tables)
+	  {
+	    if (is.character(needed.tables) == F || all(needed.tables %in% tables(obj))==F)
+	    {
+		stop("ERROR: needed.tables needs to be a character vector corresponding to table names")
+	    }
+	    
+	    if (length(needed.tables) > 1)
+	    {
+		#use the TBSL object to determine how to join the tables and create a temporary table
+		
+		start.node <- get.starting.point(schema(obj))
+		
+		if (length(needed.tables) == 2)
+		{
+		    end.node <- setdiff(needed.tables, start.node)
+		    
+		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=end.node, reverse=F, undirected=F)
+		    
+		    join.key <- foreignLocalKeyCols(schema(obj), end.node)
+		    
+		    db.con <- dbConnect(SQLite(), dbFile(obj))
+		    
+		    if (dbExistsTable(db.con, "temp_query"))
+		    {
+			dbGetQuery(db.con, "DROP TABLE temp_query");
+		    }
+		    
+		    use.query <- paste("CREATE TABLE temp_query AS SELECT * FROM", start.node, "JOIN", end.node, "USING (", join.key, ")")
+		    dbGetQuery(db.con, use.query)
+		    dbDisconnect(db.con)
+		}
+		else
+		{
+		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=F)
+		    browser()
+		}
+		
+		my_db <- src_sqlite(dbFile(obj), create = F)
+		my_db_tbl <- tbl(my_db, "temp_query")
+		
+	    }else{
+		my_db <- src_sqlite(dbFile(obj), create = F)
+		my_db_tbl <- tbl(my_db, needed.tables)
+	    }
+	    
+	    return(my_db_tbl)
+	  
+	  })
+
+#Went with an S3 method here and for select for the S4 Database class to go with the S3 generics in dplyr
+filter.Database <- function(.data, ...)
 	  {
 	    #taken from the internal code of dplyr, the dots() function
 	    use.expr <- eval(substitute(alist(...)))
@@ -328,22 +431,25 @@ setMethod("filter", signature("Database"), function(obj, ...)
 	    
 	    #figure out which tables the requested variables are in
 	    
-	    is.needed.table <- sapply(columns(obj), function(x) any(x %in% needed.vars))
+	    is.needed.table <- sapply(columns(.data), function(x) any(x %in% needed.vars))
 	    
 	    needed.tables <- names(is.needed.table)[is.needed.table]
 	    
-	    if (length(needed.tables) > 1)
-	    {
-		#use the TBSL object to determine how to join the tables and create a temporary table
-	    }else{
-		my_db <- src_sqlite(dbFile(obj), create = F)
-		my_db_tbl <- tbl(my_db, needed.tables)
-	    }
+	    my_db_tbl <- join(.data, needed.tables)
 	    
-	     #carry out the filter method of dplyr on the temporary or otherwise table
+	    #carry out the filter method of dplyr on the temporary or otherwise table
 	    
 	    return(filter(my_db_tbl, ...))
-    })
+    }
+    
+select.Database <- function(.data, ...)
+{
+    #figure out which tables are needed...
+    
+    my_db_tbl <- join(.data, needed.tables)
+    
+    return(select(my_db_tbl, ...))
+}
 
 setGeneric("populate", def=function(obj, ...) standardGeneric("populate"))
 setMethod("populate", signature("Database"), function(obj, ins.vals=NULL, use.tables=NULL, should.debug=FALSE)

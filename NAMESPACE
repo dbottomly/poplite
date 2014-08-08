@@ -1,11 +1,13 @@
 import(methods)
-importFrom(dplyr, filter)
+import(dplyr)
+import(RSQLite.extfuns)
+importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V)
 #methods
 export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-', schema, dbFile,
 tables, columns)
 
 #other functions
-export(correct.df.names, Database)
+export(correct.df.names, Database, filter.Database, select.Database)
 
 #searchCols, searchDict, searchTables,
 exportClass(TableSchemaList, Database)
