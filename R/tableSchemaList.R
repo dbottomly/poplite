@@ -24,12 +24,14 @@ tsl.to.graph <- function(tsl)
     return(graph.data.frame(stack(graph.comp.list)))
 }
 
-get.starting.point <- function(tbsl)
+get.starting.point <- function(tbsl, use.tables)
 {
     tsl.graph <- tsl.to.graph(tbsl)
-    sp.mat <- shortest.paths(tsl.graph, mode="out")
+    sp.mat <- shortest.paths(tsl.graph, mode="all")
     sp.mat[is.infinite(sp.mat)] <- 0
     diag(sp.mat) <- NA
+    
+    sp.mat <- sp.mat[use.tables, use.tables, drop=F]
     
     is.valid <- apply(sp.mat, 1, function(x) all(na.omit(x) > 0))
     
@@ -37,7 +39,8 @@ get.starting.point <- function(tbsl)
     
     dists <- apply(valid.mat, 1, function(x) sum(na.omit(x)))
     
-    return(names(dists)[which.min(dists)])
+    #assuming that the furthest table is at one end of the query path and 'should' make a good start point
+    return(names(dists)[which.max(dists)])
 }
 
 get.shortest.query.path <- function(tbsl, start=NULL, finish=NULL, reverse=TRUE, undirected=TRUE)
@@ -309,13 +312,13 @@ setMethod("dbFile", signature("Database"), function(obj)
 setGeneric("tables", def=function(obj,...) standardGeneric("tables"))
 setMethod("tables", signature("Database"), function(obj)
 	  {
-	    return(schemaNames(schema(cur.db)))
+	    return(schemaNames(schema(obj)))
 	  })
 
 setGeneric("columns", def=function(obj,...) standardGeneric("columns"))
 setMethod("columns", signature("Database"), function(obj)
 	  {
-	    cur.schema <- schema(cur.db)
+	    cur.schema <- schema(obj)
 	    
 	    ret.list <- lapply(schemaNames(cur.schema), function(x)
 		   {
@@ -361,34 +364,54 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 	    
 	    if (length(needed.tables) > 1)
 	    {
+		db.con <- dbConnect(SQLite(), dbFile(obj))
+		
+		if (dbExistsTable(db.con, "temp_query"))
+		{
+		    dbGetQuery(db.con, "DROP TABLE temp_query");
+		}
+		
 		#use the TBSL object to determine how to join the tables and create a temporary table
 		
-		start.node <- get.starting.point(schema(obj))
+		start.node <- get.starting.point(schema(obj), needed.tables)
 		
-		if (length(needed.tables) == 2)
-		{
-		    end.node <- setdiff(needed.tables, start.node)
+		table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=T)
+		
+		valid.path <- sapply(table.path, function(x) all(needed.tables %in% x))
+		
+		min.valid.path <- which.min(sapply(table.path[valid.path], length))
+		
+		use.path <- table.path[valid.path][[min.valid.path]]
+		
+		join.cols <- sapply(1:(length(use.path)-1), function(x) {
 		    
-		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=end.node, reverse=F, undirected=F)
-		    
-		    join.key <- foreignLocalKeyCols(schema(obj), end.node)
-		    
-		    db.con <- dbConnect(SQLite(), dbFile(obj))
-		    
-		    if (dbExistsTable(db.con, "temp_query"))
+		    #need to fix foreignLocalKeyCols, but for now...
+		    for.join <- foreignLocalKeyCols(schema(obj), use.path[x], use.path[x+1])
+		    if (for.join == "character(0)")
 		    {
-			dbGetQuery(db.con, "DROP TABLE temp_query");
+			back.join <- foreignLocalKeyCols(schema(obj), use.path[x+1], use.path[x])
+			
+			if (back.join == "character(0)")
+			{
+			    stop("ERROR: Cannot determine join structure")
+			}
+			else
+			{
+			    return(paste(back.join, collapse=","))
+			}
 		    }
-		    
-		    use.query <- paste("CREATE TABLE temp_query AS SELECT * FROM", start.node, "JOIN", end.node, "USING (", join.key, ")")
-		    dbGetQuery(db.con, use.query)
-		    dbDisconnect(db.con)
-		}
-		else
-		{
-		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=F)
-		    browser()
-		}
+		    else
+		    {
+			return(paste(for.join, collapse=","))
+		    }
+		})
+		
+		#use all but the first and last of these
+		
+		use.query <- paste(paste("CREATE TABLE temp_query AS SELECT * FROM", use.path[1], paste(paste("JOIN",use.path[-1],"USING (", join.cols,")"), collapse=" ")))
+		dbGetQuery(db.con, use.query)
+		
+		dbDisconnect(db.con)
 		
 		my_db <- src_sqlite(dbFile(obj), create = F)
 		my_db_tbl <- tbl(my_db, "temp_query")
@@ -442,11 +465,56 @@ filter.Database <- function(.data, ...)
 	    return(filter(my_db_tbl, ...))
     }
     
-select.Database <- function(.data, ...)
+select.Database <- function(.data, ..., .table=NULL)
 {
+    #taken from the internal code of dplyr, the dots() function
+    use.expr <- eval(substitute(alist(...)))
+    
+    if (is.null(.table) == F)
+    {
+	if (is.character(.table) && length(.table) == 1 && .table %in% tables(.data))
+	{
+	   use.tables <- .table
+	}
+	else
+	{
+	    stop("ERROR: .table needs to be the name of a single table use tables(.table) for a listing")
+	}
+	
+    }else if (length(use.expr) == 0 && is.null(.table))
+    {
+	stop("ERROR: Please either supply desired columns (columns(.data)) or specify a valid table in .table (tables(.table))")
+    }else{
+	#attempt to figure out what the tables are from the specified columns...
+	
+	use.cols <- sapply(use.expr, function(x)
+			   {
+				if (length(x) == 1)
+				{
+				    return(x)
+				}else if (length(x) == 3 && x[[1]] == ":")
+				{
+				    return(x[[2]])
+				}else{
+				    stop("ERROR: Accepted expression are of the form 'column' or 'column1':'columnN'")
+				}
+			   })
+	
+	col.to.tab <- stack(columns(sang.db))
+	
+	diff.cols <- setdiff(use.cols, as.character(col.to.tab$values))
+	
+	if (length(diff.cols) > 0)
+	{
+	    stop(paste("ERROR: Provided column(s):", paste(diff.cols, collapse=","), "could not be found in the tables"))
+	}
+	
+	use.tables <- unique(as.character(col.to.tab$ind[as.character(col.to.tab$values) %in% use.cols]))
+    }
+    
     #figure out which tables are needed...
     
-    my_db_tbl <- join(.data, needed.tables)
+    my_db_tbl <- join(.data, use.tables)
     
     return(select(my_db_tbl, ...))
 }
@@ -578,14 +646,25 @@ setMethod("foreignExtKeyCols", signature("TableSchemaList"), function(obj, table
           })
 
 setGeneric("foreignLocalKeyCols", def=function(obj, ...) standardGeneric("foreignLocalKeyCols"))
-setMethod("foreignLocalKeyCols", signature("TableSchemaList"), function(obj, table.name)
+setMethod("foreignLocalKeyCols", signature("TableSchemaList"), function(obj, table.name, join.tables=NULL)
           {
             as.character(sapply(return.element(obj, "foreign.keys")[table.name], function(x)
                    {
-                        as.character(unlist(sapply(names(x), function(y)
+			if (is.null(join.tables))
+			{
+			    as.character(unlist(sapply(names(x), function(y)
                                {
                                     return(x[[y]]$local.keys)
                                })))
+			}
+			else
+			{
+			    as.character(unlist(sapply(join.tables, function(y)
+                               {
+                                    return(x[[y]]$local.keys)
+                               })))
+			}
+                        
                    }))
           })
 

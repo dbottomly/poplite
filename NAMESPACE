@@ -4,7 +4,7 @@ import(RSQLite.extfuns)
 importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V)
 #methods
 export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-', schema, dbFile,
-tables, columns)
+tables, columns, SangerVarMask)
 
 #other functions
 export(correct.df.names, Database, filter.Database, select.Database)
