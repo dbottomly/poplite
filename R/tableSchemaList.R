@@ -145,18 +145,29 @@ setMethod("show", signature("TableSchemaList"), function(object)
                 message(paste("TableSchemaList containing", length(object), "tables"))
 		for (i in 1:length(object))
 		{
-		    message(paste("\t", "-", names(object@tab.list)[i]))
+		    num.cols <- length(object@tab.list[[i]]$db.cols)
+		    col.val <- ifelse(num.cols == 1, "Column", "Columns")
+		    message(paste("   ", "-", names(object@tab.list)[i], "(", num.cols, col.val,")"))
 		    if (is.null(object@tab.list[[i]]$foreign.keys) ==F)
 		    {
 			for (j in names(object@tab.list[[i]]$foreign.keys))
 			{
-			    loc.keys <- object@tab.list[[i]]$foreign.keys[[j]]$local.keys
-			    if (length(loc.keys) == 1)
+			    all.loc.keys <- object@tab.list[[i]]$foreign.keys[[j]]$local.keys
+			    
+			    #check if the loc.keys are still retained in the table or only used for merging purposes
+			    
+			    loc.keys <- all.loc.keys[all.loc.keys %in% object@tab.list[[i]]$db.cols]
+			    
+			    if (length(loc.keys) > 0)
 			    {
-				message(paste("\t-Column", loc.keys, "is derived from table", j))
-			    }else{
-				message(paste("\t-Columns", paste(loc.keys, collapse=","), "are derived from table", j))
+				 if (length(loc.keys) == 1)
+				{
+				    message(paste("      - Column", loc.keys, "is derived from table", j))
+				}else{
+				    message(paste("      - Columns", paste(loc.keys, collapse=","), "are derived from table", j))
+				}
 			    }
+
 			}
 		    }
 		}
@@ -311,6 +322,13 @@ return.element <- function(use.obj, name)
 
 
 setClass(Class="Database", representation=list(tbsl="TableSchemaList", db.file="character"))
+
+setMethod("show", signature("Database"), function(object)
+	  {
+	    message("Database Instance")
+	    message(paste0("File: '", dbFile(object), "'"))
+	    show(schema(object))
+	  })
 
 setGeneric("schema", def=function(obj,...) standardGeneric("schema"))
 setMethod("schema", signature("Database"), function(obj)
