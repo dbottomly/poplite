@@ -74,8 +74,6 @@ get.shortest.query.path <- function(tbsl, start=NULL, finish=NULL, reverse=TRUE,
 			    }
 			 })
     
-    
-    
     return(mask.query)
 }
 
@@ -144,7 +142,24 @@ TableSchemaList <- function(tab.list=NULL, search.cols=NULL)
 
 setMethod("show", signature("TableSchemaList"), function(object)
           {
-                message(paste("TableSchemaList of length", length(object)))
+                message(paste("TableSchemaList containing", length(object), "tables"))
+		for (i in 1:length(object))
+		{
+		    message(paste("\t", "-", names(object@tab.list)[i]))
+		    if (is.null(object@tab.list[[i]]$foreign.keys) ==F)
+		    {
+			for (j in names(object@tab.list[[i]]$foreign.keys))
+			{
+			    loc.keys <- object@tab.list[[i]]$foreign.keys[[j]]$local.keys
+			    if (length(loc.keys) == 1)
+			    {
+				message(paste("\t-Column", loc.keys, "is derived from table", j))
+			    }else{
+				message(paste("\t-Columns", paste(loc.keys, collapse=","), "are derived from table", j))
+			    }
+			}
+		    }
+		}
           })
 
 #may need to use BiocGenerics at some point...
