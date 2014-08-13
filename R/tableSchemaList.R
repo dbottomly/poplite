@@ -143,34 +143,40 @@ TableSchemaList <- function(tab.list=NULL, search.cols=NULL)
 setMethod("show", signature("TableSchemaList"), function(object)
           {
                 message(paste("TableSchemaList containing", length(object), "tables"))
-		for (i in 1:length(object))
+		
+		if (length(object) > 0)
 		{
-		    num.cols <- length(object@tab.list[[i]]$db.cols)
-		    col.val <- ifelse(num.cols == 1, "Column", "Columns")
-		    message(paste("   ", "-", names(object@tab.list)[i], "(", num.cols, col.val,")"))
-		    if (is.null(object@tab.list[[i]]$foreign.keys) ==F)
+		    for (i in 1:length(object))
 		    {
-			for (j in names(object@tab.list[[i]]$foreign.keys))
+			num.cols <- length(object@tab.list[[i]]$db.cols)
+			col.val <- ifelse(num.cols == 1, "Column", "Columns")
+			message(paste("   ", "-", names(object@tab.list)[i], "(", num.cols, col.val,")"))
+			if (is.null(object@tab.list[[i]]$foreign.keys) ==F)
 			{
-			    all.loc.keys <- object@tab.list[[i]]$foreign.keys[[j]]$local.keys
-			    
-			    #check if the loc.keys are still retained in the table or only used for merging purposes
-			    
-			    loc.keys <- all.loc.keys[all.loc.keys %in% object@tab.list[[i]]$db.cols]
-			    
-			    if (length(loc.keys) > 0)
+			    for (j in names(object@tab.list[[i]]$foreign.keys))
 			    {
-				 if (length(loc.keys) == 1)
+				all.loc.keys <- object@tab.list[[i]]$foreign.keys[[j]]$local.keys
+				
+				#check if the loc.keys are still retained in the table or only used for merging purposes
+				
+				loc.keys <- all.loc.keys[all.loc.keys %in% object@tab.list[[i]]$db.cols]
+				
+				if (length(loc.keys) > 0)
 				{
-				    message(paste("      - Column", loc.keys, "is derived from table", j))
-				}else{
-				    message(paste("      - Columns", paste(loc.keys, collapse=","), "are derived from table", j))
+				     if (length(loc.keys) == 1)
+				    {
+					message(paste("      - Column", loc.keys, "is derived from table", j))
+				    }else{
+					message(paste("      - Columns", paste(loc.keys, collapse=","), "are derived from table", j))
+				    }
 				}
+    
 			    }
-
 			}
 		    }
 		}
+		
+		
           })
 
 #may need to use BiocGenerics at some point...
@@ -343,26 +349,36 @@ setMethod("dbFile", signature("Database"), function(obj)
 	  })
 
 setGeneric("tables", def=function(obj,...) standardGeneric("tables"))
+setMethod("tables", signature("TableSchemaList"), function(obj)
+	  {
+	    return(schemaNames(obj))
+	  })
 setMethod("tables", signature("Database"), function(obj)
 	  {
-	    return(schemaNames(schema(obj)))
+	    return(tables(schema(obj)))
 	  })
 
+
 setGeneric("columns", def=function(obj,...) standardGeneric("columns"))
-setMethod("columns", signature("Database"), function(obj)
+setMethod("columns", signature("TableSchemaList"), function(obj)
 	  {
-	    cur.schema <- schema(obj)
 	    
-	    ret.list <- lapply(schemaNames(cur.schema), function(x)
+	    ret.list <- lapply(schemaNames(obj), function(x)
 		   {
-			colNames(cur.schema, x)
+			colNames(obj, x)
 		   })
 	    
-	    names(ret.list) <- schemaNames(cur.schema)
+	    names(ret.list) <- schemaNames(obj)
 	    
 	    return(ret.list)
 	  })
 
+setMethod("columns", signature("Database"), function(obj)
+	  {
+	    cur.schema <- schema(obj)
+	    
+	    return(columns(cur.schema))
+	  })
 
 Database <- function(tbsl, db.file)
 {
@@ -392,7 +408,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 	  {
 	    if (is.character(needed.tables) == F || all(needed.tables %in% tables(obj))==F)
 	    {
-		stop("ERROR: needed.tables needs to be a character vector corresponding to table names")
+		stop("ERROR: Needed.tables needs to be a character vector corresponding to table names")
 	    }
 	    
 	    if (length(needed.tables) > 1)
@@ -514,42 +530,90 @@ select.Database <- function(.data, ..., .table=NULL)
 	    stop("ERROR: .table needs to be the name of a single table use tables(.table) for a listing")
 	}
 	
+	clean.cols <- use.expr
+	
     }else if (length(use.expr) == 0 && is.null(.table))
     {
 	stop("ERROR: Please either supply desired columns (columns(.data)) or specify a valid table in .table (tables(.table))")
     }else{
 	#attempt to figure out what the tables are from the specified columns...
 	
-	use.cols <- sapply(use.expr, function(x)
+	use.col.list <- lapply(use.expr, function(x)
 			   {
 				if (length(x) == 1)
 				{
-				    return(x)
+				    return(as.character(x))
 				}else if (length(x) == 3 && x[[1]] == ":")
 				{
-				    return(x[[2]])
+				    return(sapply(x[2:3], as.character))
 				}else{
 				    stop("ERROR: Accepted expression are of the form 'column' or 'column1':'columnN'")
 				}
 			   })
 	
-	col.to.tab <- stack(columns(sang.db))
+	inp.tab.list <- get.tables.from.vars(use.col.list)
 	
-	diff.cols <- setdiff(use.cols, as.character(col.to.tab$values))
+	#where the nulls are non-input tables
+	not.sup.tab <- sapply(inp.tab.list, function(x) all(is.null(x)))
 	
-	if (length(diff.cols) > 0)
+	if(any(not.sup.tab))
 	{
-	    stop(paste("ERROR: Provided column(s):", paste(diff.cols, collapse=","), "could not be found in the tables"))
+	    col.to.tab <- stack(columns(.data))
+	    
+	    spec.tabs <- unique(as.character(unlist(inp.tab.list[not.sup.tab==F])))
+	    non.spec.tabs <- sapply(use.col.list[not.sup.tab], "[", 1)
+	    
+	    diff.cols <- setdiff(non.spec.tabs, as.character(col.to.tab$values))
+	    
+	    if (length(diff.cols) > 0)
+	    {
+		stop(paste("ERROR: Provided column(s):", paste(diff.cols, collapse=","), "could not be found in the tables"))
+	    }
+	    
+	    use.tables <- c(unique(as.character(col.to.tab$ind[as.character(col.to.tab$values) %in% non.spec.tabs])), spec.tabs)
+	    
+	}else{
+	    use.tables <- unique(as.character(unlist(inp.tab.list)))
+	    
+	    clean.cols <- sapply(1:length(use.expr), function(x)
+				 {
+				    return(gsub(paste0(inp.tab.list[[x]], "."), "", deparse(use.expr[[x]])))
+				 })
+	    
+	    clean.cols <- paste(clean.cols, collapse=",")
+	    
+	    browser()
 	}
 	
-	use.tables <- unique(as.character(col.to.tab$ind[as.character(col.to.tab$values) %in% use.cols]))
     }
     
     #figure out which tables are needed...
     
     my_db_tbl <- join(.data, use.tables)
     
-    return(select(my_db_tbl, ...))
+    return(eval(substitute(select(my_db_tbl, clean.cols), list(clean.cols=parse(text=clean.cols)))))
+}
+
+get.tables.from.vars <- function(col.list)
+{
+    tb.list <- lapply(col.list, function(x)
+	   {
+		split.x <- strsplit(x, "\\.")[[1]]
+	    
+		if (length(split.x) == 1)
+		{
+		    return(NULL)
+		    
+		}else if(length(split.x) == 2){
+		    
+		    return(split.x[1])
+		    
+		}else{
+		    stop("ERROR: Unexpected format of supplied variable")
+		}
+	   })
+    
+    return(tb.list)
 }
 
 setGeneric("populate", def=function(obj, ...) standardGeneric("populate"))
