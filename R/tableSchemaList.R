@@ -491,21 +491,46 @@ filter.Database <- function(.data, ...)
 		{
 		    return(as.character(x))
 		}else{
-		    return(.get.var.names(x[[2]]))
+		    which.calls = sapply(x, class)
+		    if (any(which.calls %in% c('call', '(')))
+		    {
+			return(lapply(x[which.calls %in% c('call', '(')], .get.var.names))
+		    }else{
+			return(as.character(x[[2]]))
+		    }
+		    
 		}
 	    }
 	    
-	    #look through use.expr to gather all the requested variables
-	    needed.vars <- sapply(use.expr[[1]][-1], function(x)
-		   {
-			.get.var.names(x)
-		   })
+	    needed.vars <- unlist(.get.var.names(use.expr[[1]]))
 	    
 	    #figure out which tables the requested variables are in
 	    
-	    is.needed.table <- sapply(columns(.data), function(x) any(x %in% needed.vars))
+	    browser()
 	    
-	    needed.tables <- names(is.needed.table)[is.needed.table]
+	    parse.tables <- get.tables.from.vars(needed.vars)
+	    
+	    not.prov.tabs <- sapply(parse.tables, is.null)
+	    
+	    if (any(not.prov.tabs))
+	    {
+		col.to.tab <- stack(columns(.data))
+		
+		np.tabs <- sapply(needed.vars[not.prov.tables], function(x)
+				  {
+					found.tabs <- col.to.tab$[]
+				  })
+	    
+		needed.tables <- names(is.needed.table)[is.needed.table]
+		
+	    }else{
+		#names are provided for all columns
+		needed.tables <- unlist(parse.tables)
+	    }
+	    
+	    #also globally check whether such tables exist and whether they have such a named column
+	    
+	   
 	    
 	    my_db_tbl <- join(.data, needed.tables)
 	    
@@ -530,7 +555,7 @@ select.Database <- function(.data, ..., .table=NULL)
 	    stop("ERROR: .table needs to be the name of a single table use tables(.table) for a listing")
 	}
 	
-	clean.cols <- use.expr
+	clean.cols <- sapply(use.expr, function(x) deparse(x))
 	
     }else if (length(use.expr) == 0 && is.null(.table))
     {
@@ -574,24 +599,33 @@ select.Database <- function(.data, ..., .table=NULL)
 	    
 	}else{
 	    use.tables <- unique(as.character(unlist(inp.tab.list)))
-	    
-	    clean.cols <- sapply(1:length(use.expr), function(x)
-				 {
-				    return(gsub(paste0(inp.tab.list[[x]], "."), "", deparse(use.expr[[x]])))
-				 })
-	    
-	    clean.cols <- paste(clean.cols, collapse=",")
-	    
-	    browser()
 	}
+	
+	clean.cols <- sapply(1:length(use.expr), function(x)
+				 {
+				    if (is.null(inp.tab.list[[x]])==F)
+				    {
+					return(gsub(paste0(inp.tab.list[[x]], "."), "", deparse(use.expr[[x]])))
+				    }else{
+					return(deparse(use.expr[[x]]))
+				    }
+				    
+				 })
 	
     }
     
     #figure out which tables are needed...
     
     my_db_tbl <- join(.data, use.tables)
+    print(clean.cols)
+    if (length(clean.cols) == 0)
+    {
+	use.statement <- "select(my_db_tbl)"
+    }else{
+	use.statement <- paste("select(my_db_tbl,", paste(clean.cols, collapse=","), ")")
+    }
     
-    return(eval(substitute(select(my_db_tbl, clean.cols), list(clean.cols=parse(text=clean.cols)))))
+    return(eval(parse(text=use.statement)))
 }
 
 get.tables.from.vars <- function(col.list)
