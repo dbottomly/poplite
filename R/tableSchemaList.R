@@ -408,7 +408,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 	  {
 	    if (is.character(needed.tables) == F || all(needed.tables %in% tables(obj))==F)
 	    {
-		stop("ERROR: Needed.tables needs to be a character vector corresponding to table names")
+		stop("ERROR: needed.tables needs to be a character vector corresponding to table names")
 	    }
 	    
 	    if (length(needed.tables) > 1)
@@ -506,37 +506,51 @@ filter.Database <- function(.data, ...)
 	    
 	    #figure out which tables the requested variables are in
 	    
-	    browser()
-	    
 	    parse.tables <- get.tables.from.vars(needed.vars)
 	    
 	    not.prov.tabs <- sapply(parse.tables, is.null)
-	    
+	    browser()
 	    if (any(not.prov.tabs))
 	    {
 		col.to.tab <- stack(columns(.data))
 		
-		np.tabs <- sapply(needed.vars[not.prov.tables], function(x)
+		np.tabs <- sapply(needed.vars[not.prov.tabs], function(x)
 				  {
-					found.tabs <- col.to.tab$[]
+					found.tabs <- as.character(col.to.tab$ind[col.to.tab$values %in% x])
+					if (length(found.tabs) == 1)
+					{
+					    return(found.tabs)
+					}else if(length(found.tabs) == 0)
+					{
+					    stop(paste("ERROR: Cannot find corresponding table for", x))
+					}
+					else
+					{
+					    stop(paste("ERROR: Column", x, "matches multiple tables try specifying it as 'table.column'"))
+					}
 				  })
 	    
-		needed.tables <- names(is.needed.table)[is.needed.table]
+		needed.tables <- unique(c(np.tabs, unlist(parse.tables[not.prov.tabs == F])))
 		
 	    }else{
 		#names are provided for all columns
-		needed.tables <- unlist(parse.tables)
+		needed.tables <- unique(unlist(parse.tables))
 	    }
-	    
-	    #also globally check whether such tables exist and whether they have such a named column
-	    
-	   
 	    
 	    my_db_tbl <- join(.data, needed.tables)
 	    
 	    #carry out the filter method of dplyr on the temporary or otherwise table
 	    
-	    return(filter(my_db_tbl, ...))
+	    cur.stat <- deparse(use.expr[[1]])
+	    
+	    for(i in needed.tables)
+	    {
+		cur.stat <- gsub(paste0(i, "."), "", cur.stat)
+	    }
+	    
+	    use.statement <- paste("select(my_db_tbl,", cur.stat, ")")
+	    
+	    return(eval(parse(text=use.statement)))
     }
     
 select.Database <- function(.data, ..., .table=NULL)
@@ -617,7 +631,7 @@ select.Database <- function(.data, ..., .table=NULL)
     #figure out which tables are needed...
     
     my_db_tbl <- join(.data, use.tables)
-    print(clean.cols)
+    
     if (length(clean.cols) == 0)
     {
 	use.statement <- "select(my_db_tbl)"
