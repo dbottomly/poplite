@@ -509,7 +509,7 @@ filter.Database <- function(.data, ...)
 	    parse.tables <- get.tables.from.vars(needed.vars)
 	    
 	    not.prov.tabs <- sapply(parse.tables, is.null)
-	    browser()
+	    
 	    if (any(not.prov.tabs))
 	    {
 		col.to.tab <- stack(columns(.data))
@@ -541,39 +541,39 @@ filter.Database <- function(.data, ...)
 	    
 	    #carry out the filter method of dplyr on the temporary or otherwise table
 	    
-	    cur.stat <- deparse(use.expr[[1]])
+	    cur.stat <- paste(deparse(use.expr[[1]]), collapse=" ")
 	    
 	    for(i in needed.tables)
 	    {
 		cur.stat <- gsub(paste0(i, "."), "", cur.stat)
 	    }
 	    
-	    use.statement <- paste("select(my_db_tbl,", cur.stat, ")")
+	    use.statement <- paste("filter(my_db_tbl,", cur.stat, ")")
 	    
 	    return(eval(parse(text=use.statement)))
     }
     
-select.Database <- function(.data, ..., .table=NULL)
+select.Database <- function(.data, ..., .tables=NULL)
 {
     #taken from the internal code of dplyr, the dots() function
     use.expr <- eval(substitute(alist(...)))
     
-    if (is.null(.table) == F)
+    if (is.null(.tables) == F)
     {
-	if (is.character(.table) && length(.table) == 1 && .table %in% tables(.data))
+	if (is.character(.tables) && length(.tables) >= 1 && all(.tables %in% tables(.data)))
 	{
-	   use.tables <- .table
+	   use.tables <- .tables
 	}
 	else
 	{
-	    stop("ERROR: .table needs to be the name of a single table use tables(.table) for a listing")
+	    stop("ERROR: .tables needs to be a vector of table names use 'tables(.data)' for a listing")
 	}
 	
 	clean.cols <- sapply(use.expr, function(x) deparse(x))
 	
     }else if (length(use.expr) == 0 && is.null(.table))
     {
-	stop("ERROR: Please either supply desired columns (columns(.data)) or specify a valid table in .table (tables(.table))")
+	stop("ERROR: Please either supply desired columns (columns(.data)) or specify valid table(s) in .tables ('tables(.data)')")
     }else{
 	#attempt to figure out what the tables are from the specified columns...
 	
@@ -877,7 +877,24 @@ setMethod("shouldMerge", signature("TableSchemaList"), function(obj, table.name=
                 sub.obj <- subset(obj, table.name)
             }
             
-            return(any(sapply(return.element(sub.obj, "foreign.keys"), is.null) == FALSE))
+	    #this is a fix on 8-18-2014 to allow a relationship between two tables to be specified using the same column(s)
+	    
+	    return(any(sapply(return.element(sub.obj, "foreign.keys"), function(x)
+		   {
+			if (is.null(x))
+			{
+			    return(F)
+			}
+			else if (all(sapply(x, function(y) length(intersect(y$local.keys, y$ext.keys)) == length(union(y$local.keys, y$ext.keys)))))
+			{
+			    return(F)
+			}
+			else
+			{
+			    return(T)
+			}
+		   })))
+	    
         })
 
 setGeneric("schemaNames", def=function(obj, ...) standardGeneric("schemaNames"))
