@@ -885,7 +885,7 @@ setMethod("shouldMerge", signature("TableSchemaList"), function(obj, table.name=
 			{
 			    return(F)
 			}
-			else if (all(sapply(x, function(y) length(intersect(y$local.keys, y$ext.keys)) == length(union(y$local.keys, y$ext.keys)))))
+			else if (length(intersect(x$local.keys, x$ext.keys)) == length(union(x$local.keys, x$ext.keys)))
 			{
 			    return(F)
 			}
@@ -1170,23 +1170,32 @@ setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, fro
                     }
                     else
                     {
-                        obj@tab.list[[to]]$foreign.keys <- append(obj@tab.list[to]$foreign.keys, use.fk)
+                        obj@tab.list[[to]]$foreign.keys <- append(obj@tab.list[[to]]$foreign.keys, use.fk)
                     }
                     
-                    #also modify db.cols and db.schema to reflect the new keys/relationships
+                    #also modify db.cols and db.schema to reflect the new keys/relationships if a non one-to-one relationship is specified
                     
-                    which.rhs <- which(obj@tab.list[[to]]$db.cols %in% cur.rhs)
-                    obj@tab.list[[to]]$db.cols <- obj@tab.list[[to]]$db.cols[-which.rhs]
-                    obj@tab.list[[to]]$db.schema <- obj@tab.list[[to]]$db.schema[-which.rhs] 
-                    
-                    obj@tab.list[[to]]$db.cols <- append(obj@tab.list[[to]]$db.cols, cur.lhs)
-                    
-                    #add in what the schema is in from, cleaning a little for integer autoincrement
-                    
-                    curm <- match(cur.lhs, obj@tab.list[[from]]$db.cols)
-                    
-                    obj@tab.list[[to]]$db.schema <- append(obj@tab.list[[to]]$db.schema, sapply(strsplit(obj@tab.list[[from]]$db.schema[curm], "\\s+"), "[[", 1))
-                    
+		    if (length(intersect(cur.rhs, cur.lhs)) != length(union(cur.rhs, cur.lhs)))
+		    {
+			#if any of the previous keys are one-to-one keys then keep them as part of the table
+			
+			is.direct.keys <- sapply(obj@tab.list[[to]]$foreign.keys, function(x) length(intersect(x$local.keys, x$ext.keys)) == length(union(x$local.keys, x$ext.keys)))
+			
+			cur.rhs <- setdiff(cur.rhs, unlist(obj@tab.list[[to]]$foreign.keys[is.direct.keys]))
+			
+			which.rhs <- which(obj@tab.list[[to]]$db.cols %in% cur.rhs)
+			obj@tab.list[[to]]$db.cols <- obj@tab.list[[to]]$db.cols[-which.rhs]
+			obj@tab.list[[to]]$db.schema <- obj@tab.list[[to]]$db.schema[-which.rhs] 
+			
+			obj@tab.list[[to]]$db.cols <- append(obj@tab.list[[to]]$db.cols, cur.lhs)
+			
+			#add in what the schema is in from, cleaning a little for integer autoincrement
+			
+			curm <- match(cur.lhs, obj@tab.list[[from]]$db.cols)
+			
+			obj@tab.list[[to]]$db.schema <- append(obj@tab.list[[to]]$db.schema, sapply(strsplit(obj@tab.list[[from]]$db.schema[curm], "\\s+"), "[[", 1))
+		    }
+		    
                     validObject(obj)
                     return(obj)
                  })
