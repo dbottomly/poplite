@@ -433,7 +433,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		use.path <- table.path[valid.path][[min.valid.path]]
 		
 		join.cols <- sapply(1:(length(use.path)-1), function(x) {
-		    
+		    stop("BROKEN HERE...")
 		    #need to fix foreignLocalKeyCols, but for now...
 		    for.join <- foreignLocalKeyCols(schema(obj), use.path[x], use.path[x+1])
 		    if (for.join == "character(0)")
@@ -778,51 +778,73 @@ setMethod("searchDict", signature("TableSchemaList"), function(obj, name, value=
           })
 
 #need to go through, either here or in the object validation function to ensure that the expected foreign keys match up to the observed
+#setGeneric("foreignExtKeyCols", def=function(obj, ...) standardGeneric("foreignExtKeyCols"))
+#setMethod("foreignExtKeyCols", signature("TableSchemaList"), function(obj, table.name)
+#          {
+#            as.character(sapply(return.element(obj, "foreign.keys")[table.name], function(x)
+#                   {
+#                        as.character(unlist(sapply(names(x), function(y)
+#                               {
+#                                    return(x[[y]]$ext.keys)
+#                               })))
+#                   }))
+#          })
+
 setGeneric("foreignExtKeyCols", def=function(obj, ...) standardGeneric("foreignExtKeyCols"))
 setMethod("foreignExtKeyCols", signature("TableSchemaList"), function(obj, table.name)
           {
-            as.character(sapply(return.element(obj, "foreign.keys")[table.name], function(x)
-                   {
-                        as.character(unlist(sapply(names(x), function(y)
-                               {
-                                    return(x[[y]]$ext.keys)
-                               })))
-                   }))
+	    lapply(return.element(obj, "foreign.keys")[[table.name]], function(x)
+		   {
+			return(x$ext.keys)
+		   })
           })
 
+#setGeneric("foreignLocalKeyCols", def=function(obj, ...) standardGeneric("foreignLocalKeyCols"))
+#setMethod("foreignLocalKeyCols", signature("TableSchemaList"), function(obj, table.name, join.tables=NULL)
+#          {
+#            as.character(sapply(return.element(obj, "foreign.keys")[table.name], function(x)
+#                   {
+#			if (is.null(join.tables))
+#			{
+#			    as.character(unlist(sapply(names(x), function(y)
+#                               {
+#                                    return(x[[y]]$local.keys)
+#                               })))
+#			}
+#			else
+#			{
+#			    as.character(unlist(sapply(join.tables, function(y)
+#                               {
+#                                    return(x[[y]]$local.keys)
+#                               })))
+#			}
+#                        
+#                   }))
+#          })
+
 setGeneric("foreignLocalKeyCols", def=function(obj, ...) standardGeneric("foreignLocalKeyCols"))
-setMethod("foreignLocalKeyCols", signature("TableSchemaList"), function(obj, table.name, join.tables=NULL)
+setMethod("foreignLocalKeyCols", signature("TableSchemaList"), function(obj, table.name)
           {
-            as.character(sapply(return.element(obj, "foreign.keys")[table.name], function(x)
-                   {
-			if (is.null(join.tables))
-			{
-			    as.character(unlist(sapply(names(x), function(y)
-                               {
-                                    return(x[[y]]$local.keys)
-                               })))
-			}
-			else
-			{
-			    as.character(unlist(sapply(join.tables, function(y)
-                               {
-                                    return(x[[y]]$local.keys)
-                               })))
-			}
-                        
-                   }))
+            lapply(return.element(obj, "foreign.keys")[[table.name]], function(x)
+		   {
+			return(x$local.keys)
+		   })
           })
 
 setGeneric("foreignExtKeySchema", def=function(obj, ...) standardGeneric("foreignExtKeySchema"))
 setMethod("foreignExtKeySchema", signature("TableSchemaList"), function(obj, table.name)
           {
-            as.character(sapply(return.element(obj, "foreign.keys")[table.name], function(x)
-                   {
-                        as.character(unlist(sapply(names(x), function(y)
-                               {
-                                    colSchema(obj, y, mode="normal")[match(x[[y]]$ext.keys, colNames(obj, y, mode="normal"))]
-                               })))
-                   }))
+	    
+	    ext.keys <- foreignExtKeyCols(obj, table.name)
+	    
+	    ret.list <- lapply(names(ext.keys), function(x,e.k)
+		   {
+			colSchema(obj, x, mode="normal")[match(e.k[[x]], colNames(obj, x, mode="normal"))]
+		   }, ext.keys)
+	    
+	    names(ret.list) <- names(ext.keys)
+	    return(ret.list)
+	    
           })
 
 setGeneric("bindDataFunction", def=function(obj, ...) standardGeneric("bindDataFunction"))
@@ -933,6 +955,8 @@ setMethod("tableName", signature("TableSchemaList"), function(obj, table.name, m
                 return(switch(table.mode, normal=table.name, merge=paste(table.name, "temp", sep="_")))
           })
 
+
+#need to make colNames and colSchema consistent and deal with the direct keys
 setGeneric("colNames", def=function(obj, ...) standardGeneric("colNames"))
 setMethod("colNames", signature("TableSchemaList"), function(obj, table.name, mode=c("normal", "merge"))
           {
@@ -940,10 +964,14 @@ setMethod("colNames", signature("TableSchemaList"), function(obj, table.name, mo
                 sub.obj <- subset(obj, table.name)
                 base.cols <- as.character(return.element(sub.obj, "db.cols"))
                 base.schema <- as.character(return.element(sub.obj, "db.schema"))
-                foreign.cols <- foreignExtKeyCols(obj, table.name)
-                
-                #also remove the columns that will be present in the final table but not part of the initial table
-                rm.cols <- foreignLocalKeyCols(obj, table.name)
+		
+		direct.keys <- directKeys(obj, table.name)
+		
+		foreign.cols <- mapply(function(x,y){
+					    #also remove the columns that will be present in the final table but not part of the initial table but keep the direct keys
+					    rm.cols <- setdiff(y, dir.keys)
+					    return(setdiff(x, rm.cols))
+				       }, foreignExtKeyCols(obj, table.name), foreignLocalKeyCols(obj, table.name))
                 
                 return(switch(table.mode, normal=base.cols, merge=c(foreign.cols[foreign.cols %in% rm.cols == FALSE], base.cols[base.schema != "INTEGER PRIMARY KEY AUTOINCREMENT" & base.cols %in% rm.cols == FALSE])))
           })
@@ -959,7 +987,7 @@ setMethod("colSchema", signature("TableSchemaList"), function(obj, table.name, m
                 foreign.cols <- foreignExtKeyCols(obj, table.name)
                 
                 #also remove the columns that will be present in the final table but not part of the initial table
-                rm.cols <- foreignLocalKeyCols(obj, table.name)
+                rm.cols <- setdiff(foreignLocalKeyCols(obj, table.name), directKeys(obj, table.name))
                 rm.schema <- base.cols %in% rm.cols
                 
                 return(switch(table.mode, normal=base.schema, merge=c(foreign.schema[foreign.cols %in% rm.cols == FALSE], base.schema[base.schema != "INTEGER PRIMARY KEY AUTOINCREMENT" & rm.schema == FALSE])))
@@ -990,6 +1018,16 @@ setMethod("createTable", signature("TableSchemaList"), function(obj, table.name,
                 
                 return(paste("CREATE",temp.str,"TABLE", tableName(obj, table.name, table.mode), "(", paste(paste(use.cols, use.schema), collapse=","), tab.constr, ")"))
           })
+
+setGeneric("directKeys", def=function(obj, ...) standardGeneric("directKeys"))
+setMethod("directKeys", signature("TableSchemaList"), function(obj, table.name)
+	  {
+		all.keys <- return.element(obj, "foreign.keys")[[table.name]]
+		
+		is.direct.keys <- sapply(all.keys, function(x) length(intersect(x$local.keys, x$ext.keys)) == length(union(x$local.keys, x$ext.keys)))
+		
+		return(unique(as.character(unlist(all.keys[is.direct.keys]))))
+	  })
 
 setGeneric("mergeStatement", def=function(obj, ...) standardGeneric("mergeStatement"))
 setMethod("mergeStatement", signature("TableSchemaList"), function(obj, table.name)
@@ -1179,9 +1217,9 @@ setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, fro
 		    {
 			#if any of the previous keys are one-to-one keys then keep them as part of the table
 			
-			is.direct.keys <- sapply(obj@tab.list[[to]]$foreign.keys, function(x) length(intersect(x$local.keys, x$ext.keys)) == length(union(x$local.keys, x$ext.keys)))
+			direct.keys <- directKeys(obj, to)
 			
-			cur.rhs <- setdiff(cur.rhs, unlist(obj@tab.list[[to]]$foreign.keys[is.direct.keys]))
+			cur.rhs <- setdiff(cur.rhs, direct.keys)
 			
 			which.rhs <- which(obj@tab.list[[to]]$db.cols %in% cur.rhs)
 			obj@tab.list[[to]]$db.cols <- obj@tab.list[[to]]$db.cols[-which.rhs]
