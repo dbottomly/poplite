@@ -34,3 +34,8 @@ SangerVarMask <- function()
                                                                                                     reference=list(local.keys="ref_id", ext.keys=c("seqnames", "start", "end", "vcf_annot_id")),
                                                                                                     probe_align=list(local.keys="probe_align_id", ext.keys=c("probe_chr", "probe_start", "probe_end")))))))
 }
+
+Plethy <- function()
+{
+    return(new("TableSchemaList", tab.list=list()))
+}
