@@ -50,10 +50,6 @@ Objects can be created by calls of the form \code{new("TableSchemaList", tab.lis
     \item{createTable}{\code{signature(obj = "TableSchemaList")}, table.name, mode=c("normal", "merge"): Produces a create table statement based on the table specified in \code{table.name} and whether the table should be temporary for merging purposes or normal permanent table}
     \item{insertStatement}{\code{signature(obj = "TableSchemaList")}, table.name, mode=c("normal", "merge"): Produces an insert statement based on the table specified in \code{table.name} and whether the table should be temporary for merging purposes or normal permanent table.  This insert statement will be used in conjunction with \code{dbGetPreparedQuery} in the RSQLite package and the \code{data.frame} resulting from the \code{dta.func} function to populate the initial database table.}
     \item{mergeStatement}{\code{signature(obj = "TableSchemaList")}, table.name: Produces a statement joining an existing table and a temporary one and inserting into a new (non-temporary) tables}
-    \item{searchCols}{\code{signature(obj = "TableSchemaList")}, name: Return the column(s) to be searched for a given search label}
-    \item{searchDict}{\code{signature(obj = "TableSchemaList")}, name, value=NULL: Return the database values for a given search label and key}
-    \item{searchTables}{\code{signature(obj = "TableSchemaList")}, name:Return the table name associated with a given search label}
- 	}
 }
 
 \author{
@@ -61,7 +57,7 @@ Daniel Bottomly
 }
 
 \examples{
-tbsl <- SangerTableSchemaList()
+tbsl <- SangerVarMask()
 
 createTable(tbsl, table.name="reference", mode="normal")
 createTable(tbsl, table.name="reference", mode="merge")
@@ -70,12 +66,6 @@ insertStatement(tbsl, table.name="reference", mode="normal")
 insertStatement(tbsl, table.name="reference", mode="merge")
 
 mergeStatement(tbsl, table.name="reference")
-
-searchCols(tbsl)
-
-searchDict(tbsl, "mapping.status", "unique")
-
-searchTables(tbsl)
 
 }
 \keyword{classes}
