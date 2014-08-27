@@ -1,8 +1,3 @@
-require("RUnit", quietly = TRUE)
-
-testResult <- runTestFile("tests_tbsl.R")
-printTextProtocol(testResult, showDetails = TRUE)
-
 
 test.db.1 <- function()
 {
@@ -27,6 +22,8 @@ test.tbsl <- function()
     #makeSchemaFromData
     
     #append
+    
+    checkTrue(F)
     
     #length
     

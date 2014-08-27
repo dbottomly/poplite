@@ -132,12 +132,12 @@ valid.TableSchemaList <- function(object)
     }
 }
 
-setClass(Class="TableSchemaList", representation=list(tab.list="list", search.cols="list"), prototype=prototype(tab.list=list(), search.cols=list()), validity=valid.TableSchemaList)
+setClass(Class="TableSchemaList", representation=list(tab.list="list"), prototype=prototype(tab.list=list()), validity=valid.TableSchemaList)
 
 #need to fix me...
-TableSchemaList <- function(tab.list=NULL, search.cols=NULL)
+TableSchemaList <- function(tab.list=NULL)
 {
-    return(new("TableSchemaList", tab.list=tab.list, search.cols=search.cols))
+    return(new("TableSchemaList", tab.list=tab.list))
 }
 
 setMethod("show", signature("TableSchemaList"), function(object)
@@ -570,7 +570,7 @@ select.Database <- function(.data, ..., .tables=NULL)
 	
 	clean.cols <- sapply(use.expr, function(x) deparse(x))
 	
-    }else if (length(use.expr) == 0 && is.null(.table))
+    }else if (length(use.expr) == 0 && is.null(.tables))
     {
 	stop("ERROR: Please either supply desired columns (columns(.data)) or specify valid table(s) in .tables ('tables(.data)')")
     }else{
