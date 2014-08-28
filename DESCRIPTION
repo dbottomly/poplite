@@ -6,6 +6,6 @@ Author: Daniel Bottomly
 Maintainer: Daniel Bottomly <bottomly@ohsu.edu>
 Depends: R (>= 3.1), RSQLite, methods, dplyr, RSQLite.extfuns
 Imports: igraph
-Suggests: RUnit
+Suggests: testthat, Lahman
 Description: Provides object relational mapping (ORM) like objects and accompanying methods which facilitates working with SQLite databases.    
 License: GPL-3
