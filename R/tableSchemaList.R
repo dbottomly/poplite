@@ -210,55 +210,59 @@ setMethod("subset", signature("TableSchemaList"), function(x, table.name)
             return(new("TableSchemaList", tab.list=x@tab.list[table.name]))
           })
 
-setGeneric("makeSchemaFromData", def=function(obj, ...) standardGeneric("makeSchemaFromData"))
-setMethod("makeSchemaFromData", signature("data.frame"), function(obj, name=NULL, primary.cols=NULL)
-          {
-            if (missing(name) || is.null(name) || is.na(name))
-            {
-                stop("ERROR: Please supply a name for the table")
-            }
-	    
-	    if (is.null(names(obj)))
-	    {
-		stop("ERROR: obj needs to have column names")
-	    }
-	    
-	    if (valid.db.names(names(obj)) == F)
-	    {
-		stop("ERROR: The names of the supplied data.frame need to be modified for the database see correct.df.names")
-	    }
-            
-            cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func= eval(parse(text=paste0("function(x) x[['",name,"']]"))), should.ignore=T, foreign.keys=NULL)
-            
-            if (missing(primary.cols) || is.null(primary.cols) || is.na(primary.cols))
-            {
-                cur.list$db.constr <- ""
-                cur.list$db.cols <- paste0(name, "_ind")
-                cur.list$db.schema <- "INTEGER PRIMARY KEY AUTOINCREMENT"
-            }
-            else if (is.character(primary.cols) && is.null(names(obj)) == F && all(primary.cols %in% names(obj)))
-            {
-                cur.list$db.constr <- paste0("CONSTRAINT ", name, "_idx UNIQUE (", paste(primary.cols, collapse=",") ,")")
-            }
-            else
-            {
-                stop("ERROR: primary.cols needs to be NULL or a character vector corresponding to the names of obj")
-            }
-            
-            cur.list$db.cols <- append(cur.list$db.cols, names(obj))
-            
-            cur.list$db.schema <- append(cur.list$db.schema, determine.db.types(obj))
-            
-            tab.list <- list(cur.list)
-            names(tab.list) <- name
-            
-            return(new("TableSchemaList", tab.list=tab.list))
-          })
-
-correct.df.names <- function(dta)
+makeSchemaFromData <- function(tab.df, name=NULL, primary.cols=NULL)
 {
-    names(dta) <- make.db.names.default(names(dta))
-    return(dta)
+  if (missing(name) || is.null(name) || is.na(name))
+  {
+      stop("ERROR: Please supply a name for the table")
+  }
+  
+  if (class(tab.df) != "data.frame")
+    {
+	stop("ERROR: tab.df needs to be a data.frame")
+    }
+  
+  if (is.null(names(tab.df)))
+  {
+      stop("ERROR: tab.df needs to have column names")
+  }
+  
+  if (valid.db.names(names(tab.df)) == F)
+  {
+      stop("ERROR: The names of the supplied data.frame need to be modified for the database see correct.df.names")
+  }
+  
+  cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func= eval(parse(text=paste0("function(x) x[['",name,"']]"))), should.ignore=T, foreign.keys=NULL)
+  
+  if (missing(primary.cols) || is.null(primary.cols) || is.na(primary.cols))
+  {
+      cur.list$db.constr <- ""
+      cur.list$db.cols <- paste0(name, "_ind")
+      cur.list$db.schema <- "INTEGER PRIMARY KEY AUTOINCREMENT"
+  }
+  else if (is.character(primary.cols) && is.null(names(tab.df)) == F && all(primary.cols %in% names(tab.df)))
+  {
+      cur.list$db.constr <- paste0("CONSTRAINT ", name, "_idx UNIQUE (", paste(primary.cols, collapse=",") ,")")
+  }
+  else
+  {
+      stop("ERROR: primary.cols needs to be NULL or a character vector corresponding to the names of tab.df")
+  }
+  
+  cur.list$db.cols <- append(cur.list$db.cols, names(tab.df))
+  
+  cur.list$db.schema <- append(cur.list$db.schema, determine.db.types(tab.df))
+  
+  tab.list <- list(cur.list)
+  names(tab.list) <- name
+  
+  return(new("TableSchemaList", tab.list=tab.list))
+}
+
+correct.df.names <- function(tab.df)
+{
+    names(tab.df) <- make.db.names.default(names(tab.df))
+    return(tab.df)
 }
 
 valid.db.names <- function(inp.names)

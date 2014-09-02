@@ -1,51 +1,46 @@
 \name{Database-class}
 \Rdversion{1.1}
 \docType{class}
+\alias{Database}
 \alias{Database-class}
 \alias{columns,Database-method}
+\alias{dbFile}
 \alias{dbFile,Database-method}
+\alias{populate}
 \alias{populate,Database-method}
+\alias{schema}
 \alias{schema,Database-method}
 \alias{tables,Database-method}
 
 \title{Class \code{"Database"}}
 \description{
-%%  ~~ A concise (1-5 lines) description of what the class is. ~~
+An object representing an SQLite database containing both the location of the file
+as well as a \code{TableSchemaList} object describing the structure of the database.
 }
 \section{Objects from the Class}{
-Objects can be created by calls of the form \code{new("Database", ...)}.
-%%  ~~ describe objects here ~~ 
+Objects can be created by calls of the form \code{Database(tbsl, db.file)}.
+ 
 }
 \section{Slots}{
   \describe{
-    \item{\code{tbsl}:}{Object of class \code{"TableSchemaList"} ~~ }
-    \item{\code{db.file}:}{Object of class \code{"character"} ~~ }
+    \item{\code{tbsl}:}{Object of class \code{"TableSchemaList"} representing the current or desired database schema}
+    \item{\code{db.file}:}{Single file path to the desired location of the database}
   }
 }
 \section{Methods}{
   \describe{
-    \item{columns}{\code{signature(obj = "Database")}: ... }
-    \item{dbFile}{\code{signature(obj = "Database")}: ... }
-    \item{populate}{\code{signature(obj = "Database")}: ... }
-    \item{schema}{\code{signature(obj = "Database")}: ... }
-    \item{tables}{\code{signature(obj = "Database")}: ... }
+    \item{columns}{\code{signature(obj = "Database")}: Returns a list of the database table columns indexed by table name}
+    \item{dbFile}{\code{signature(obj = "Database")}: Returns the file path associated with the database}
+    \item{populate}{\code{signature(obj = "Database")}, db.con, ins.vals, use.tables = NULL, should.debug = FALSE: Populate an SQLite database using the schema and location from the \code{Database} object and the data in the \code{ins.vals} list to be inserted as specified in the  \code{dta.func} element of the \code{TableSchemaList}.  The \code{use.tables} argument can be used to limit the tables populated.  The \code{should.debug} argument outputs more verbose messages regarding the SQL queries.}
+    \item{schema}{\code{signature(obj = "Database")}: Returns the associated \code{TableSchemaList} object}
+    \item{tables}{\code{signature(obj = "Database")}: Returns a character vector containing the table names}
 	 }
 }
-\references{
-%%  ~~put references to the literature/web site here~~
-}
 \author{
-%%  ~~who you are~~
+Daniel Bottomly
 }
-\note{
-%%  ~~further notes~~
-}
-
-%% ~Make other sections like Warning with \section{Warning }{....} ~
-
 \seealso{
-%%  ~~objects to See Also as \code{\link{~~fun~~}}, ~~~
-%%  ~~or \code{\linkS4class{CLASSNAME}} for links to other classes ~~~
+	\code{\linkS4class{TableSchemaList}}
 }
 \examples{
 showClass("Database")

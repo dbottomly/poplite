@@ -1,62 +1,49 @@
 \name{Helper Functions}
 \alias{makeSchemaFromData}
-%- Also NEED an '\alias' for EACH other topic documented here.
+\alias{correct.df.names}
+
 \title{
-Functions to facilitate the creation of \code{poplite\'s} data structures.
+Functions to facilitate the creation of \code{poplite}\'s data structures.
 }
 \description{
-%%  ~~ A concise (1-5 lines) description of what the function does. ~~
+These functions facilitate the creation of \code{TableSchemaList} objects from 
+existing or supplementary R data structures such as the \code{data.frame}.
 }
 \usage{
-makeSchemaFromData(obj, ...)
-}
-%- maybe also 'usage' for other objects documented here.
-\arguments{
-  \item{obj}{
-%%     ~~Describe \code{obj} here~~
-}
-  \item{\dots}{
-%%     ~~Describe \code{\dots} here~~
-}
-}
-\details{
-%%  ~~ If necessary, more details than the description above ~~
-}
-\value{
-%%  ~Describe the value returned
-%%  If it is a LIST, use
-%%  \item{comp1 }{Description of 'comp1'}
-%%  \item{comp2 }{Description of 'comp2'}
-%% ...
-}
-\references{
-%% ~put references to the literature/web site here ~
-}
-\author{
-%%  ~~who you are~~
-}
-\note{
-%%  ~~further notes~~
+makeSchemaFromData(tab.df, name=NULL, primary.cols=NULL)
+correct.df.names(tab.df)
 }
 
-%% ~Make other sections like Warning with \section{Warning }{....} ~
+\arguments{
+  \item{tab.df}{
+A \code{data.frame} representing a database table
+}
+  \item{name}{
+Desired name of the database table
+}
+\item{primary.cols}{
+	An optional character vector containing the columns that uniquely identify a given row.  If missing or NULL,
+	an autoincremented integer is used instead.
+}
+}
+
+\value{
+
+\item{makeSchemaFromData}{A \code{TableSchemaList} object}
+\item{correct.df.names}{A \code{data.frame} with valid names for SQLite}
+
+}
+
+\author{
+Daniel Bottomly
+}
 
 \seealso{
-%% ~~objects to See Also as \code{\link{help}}, ~~~
+	\code{\linkS4class{TableSchemaList}}
 }
 \examples{
-##---- Should be DIRECTLY executable !! ----
-##-- ==>  Define data, use random,
-##--	or do  help(data=index)  for the standard data sets.
-
-## The function is currently defined as
-structure(function (obj, ...) 
-standardGeneric("makeSchemaFromData"), generic = structure("makeSchemaFromData", package = "poplite"), package = "poplite", group = list(), valueClass = character(0), signature = "obj", default = `\001NULL\001`, skeleton = (function (obj, 
-    ...) 
-stop("invalid call in method dispatch to 'makeSchemaFromData' (no default method)", 
-    domain = NA))(obj, ...), class = structure("standardGeneric", package = "methods"))
+	print ('hello')
 }
 % Add one or more standard keywords, see file 'KEYWORDS' in the
 % R documentation directory.
-\keyword{ ~kwd1 }
-\keyword{ ~kwd2 }% __ONLY ONE__ keyword per line
+\keyword{ utilities}

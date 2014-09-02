@@ -1,4 +1,6 @@
 \name{External methods}
+\alias{filter}
+\alias{select}
 \alias{filter.Database}
 \alias{select.Database}
 
@@ -6,13 +8,13 @@
 Specific methods for generics defined in external packages.
 }
 \description{
-
+These functions provide convienient interfaces to functionality provided in external packages (currently only \pkg{dplyr}).
 }
 \usage{
-filter.Database(.data, ...)
-select.Database(.data,..., .tables=NULL)
+\method{filter}{Database}(.data, \dots)
+\method{select}{Database}(.data,\dots, .tables=NULL)
 }
-%- maybe also 'usage' for other objects documented here.
+
 \arguments{
   \item{.data}{
 A \code{Database} object.
@@ -29,24 +31,17 @@ variable name similar to SQL statements (e.g. 'table.column').
 }
 
 \value{
-%%  ~Describe the value returned
-%%  If it is a LIST, use
-%%  \item{comp1 }{Description of 'comp1'}
-%%  \item{comp2 }{Description of 'comp2'}
-%% ...
+An object of class \code{tbl_sqlite}.
 }
-\references{
-%% ~put references to the literature/web site here ~
-}
+
 \author{
 Daniel Bottomly
 }
 \seealso{
-%% ~~objects to See Also as \code{\link{help}}, ~~~
+\code{\link[dplyr]{filter}},\code{\link[dplyr]{select}}
 }
 \examples{
+	print ('hello')
 }
-% Add one or more standard keywords, see file 'KEYWORDS' in the
-% R documentation directory.
+
 \keyword{utilities}
-\keyword{ ~kwd2 }% __ONLY ONE__ keyword per line

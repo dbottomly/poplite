@@ -9,12 +9,13 @@
 \alias{insertStatement}
 \alias{mergeStatement,TableSchemaList-method}
 \alias{mergeStatement}
-\alias{populate}
-\alias{populate,TableSchemaList-method}
 \alias{append,TableSchemaList,TableSchemaList-method}
+\alias{columns}
 \alias{columns,TableSchemaList-method}
+\alias{length}
 \alias{length,TableSchemaList-method}
-\alias{relationship<-,TableSchemaList-method}
+\alias{'relationship<-',TableSchemaList-method}
+\alias{tables}
 \alias{tables,TableSchemaList-method}
 
 \title{Class \code{"TableSchemaList"}}
@@ -43,10 +44,11 @@ Objects can be created by calls of the form \code{new("TableSchemaList", tab.lis
   	\item{append}{\code{signature(obj = "TableSchemaList")}, x, values, after=length(x): Return a new \code{TableSchemaList} object consisting of \code{x}, the object to be modified, \code{values} the object(s) to be added and \code{after} the element of \code{x} to place them after.}
   	\item{columns}{\code{signature(obj = "TableSchemaList")} Returns a list of length equal to the number of tables where each element contains columns for the given table.}
   	\item{tables}{\code{signature(obj = "TableSchemaList")} Returns a vector of the table names in the object.}
-  	\item{populate}{\code{signature(obj = "TableSchemaList")}, db.con, ins.vals, use.tables = NULL, should.debug = FALSE: Populate an SQLite database provided in db.con, using the schema specified in TableSchemaList and the data in the ins.vals list to be inserted as specified in the  \code{dta.func} element of obj.  The \code{use.tables} argument can be used to limit the tables populated.  The \code{should.debug} argument outputs more verbose messages regarding the SQL queries.}
     \item{createTable}{\code{signature(obj = "TableSchemaList")}, table.name, mode=c("normal", "merge"): Produces a create table statement based on the table specified in \code{table.name} and whether the table should be temporary for merging purposes or normal permanent table}
     \item{insertStatement}{\code{signature(obj = "TableSchemaList")}, table.name, mode=c("normal", "merge"): Produces an insert statement based on the table specified in \code{table.name} and whether the table should be temporary for merging purposes or normal permanent table.  This insert statement will be used in conjunction with \code{dbGetPreparedQuery} in the RSQLite package and the \code{data.frame} resulting from the \code{dta.func} function to populate the initial database table.}
     \item{mergeStatement}{\code{signature(obj = "TableSchemaList")}, table.name: Produces a statement joining an existing table and a temporary one and inserting into a new (non-temporary) tables}
+	\item{relationship<-}{\code{signature(obj = "TableSchemaList")}, from, to, value: Provides a mechanism to specify how two tables are connected to each other in a database.  The arguments \code{from} and \code{to} should refer to tables in the specified \code{TableSchemaList}.  The value should be a formula describing how the column(s) correspond to each other.  The special value '.' refers to the autoincremented integer column if applicable.  The simplest use would be to specify that two tables should be joined on the same column (e.g. \code{column1~column1}).  Another typical use would be two say that the combination of one or more columns in one table should uniquely identify a row in another table (e.g. \code{.~column1+column2}).}
+
 }}
 
 \author{
