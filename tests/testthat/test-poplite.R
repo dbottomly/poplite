@@ -1,17 +1,76 @@
 #currently no tests for the presupplied masks, correct.db.names, the Database and TableSchemaList classes.
 
+check.table.import <- function(dta, tbsl, name, pks=paste(name, "ind", sep="_"))
+{
+    expect_is(tbsl, "TableSchemaList")
+    expect_named(tbsl@tab.list, name)
+    #are the column names ok
+    expect_equal(length(intersect(tbsl@tab.list[[name]]$db.cols, union(names(dta), pks))), length(union(tbsl@tab.list[[name]]$db.cols, union(names(dta), pks))))
+    
+    #are the column types ok in a basic sense
+    ##just removes autoincremented PKs
+    common.cols <- intersect(tbsl@tab.list[[name]]$db.cols, names(dta))
+    
+    tab.cols <- sapply(names(dta), function(x) class(dta[,x]))
+    tab.cols <- toupper(tab.cols)
+    tab.cols[tab.cols %in% c("CHARACTER", "FACTOR")] <- "TEXT"
+    
+    expect_identical(tab.cols, tbsl@tab.list[[name]]$db.schema[names(tab.cols)])
+}
+
+#these are simple relationships so the keys will be equivalent and there should be no modifications of columns etc
+check.direct.keys <- function(tbsl, from, to, key.name, orig.obj)
+{
+    expect_named(tbsl@tab.list[[to]]$foreign.keys, from)
+    expect_identical(tbsl@tab.list[[to]]$foreign.keys[[from]]$local.keys, tbsl@tab.list[[to]]$foreign.keys[[from]]$ext.keys)
+    
+    expect_identical(tbsl@tab.list[[to]]$foreign.keys[[from]]$local.keys, key.name)
+    
+    expect_identical(tbsl@tab.list[[to]]$db.col, orig.obj@tab.list[[to]]$db.col)
+    expect_identical(tbsl@tab.list[[to]]$db.schema, orig.obj@tab.list[[to]]$db.schema)
+    
+    expect_identical(tbsl@tab.list[[from]]$db.col, orig.obj@tab.list[[from]]$db.col)
+    expect_identical(tbsl@tab.list[[from]]$db.schema, orig.obj@tab.list[[from]]$db.schema)
+}
+
+
 test_that("Create and work with TBSL object",
 {
-    #makeSchemaFromData
+    #makeSchemaFromData, append and length
     
-    #append
+    baseball.teams <- new("TableSchemaList")
     
-    expect_true(F)
+    expect_equal(length(baseball.teams), 0)
     
-    #length
+    franches <- makeSchemaFromData(TeamsFranchises, name="team_franch")
+    check.table.import(TeamsFranchises, franches, "team_franch")
     
-    #relationship
+    baseball.teams <- append(baseball.teams, franches)
+    
+    expect_equal(length(baseball.teams), 1)
+    
+    teams <- makeSchemaFromData(Teams, name="teams")
+    check.table.import(Teams, teams, "teams")
+    
+    baseball.teams <- append(baseball.teams, teams)
+    
+    expect_equal(length(baseball.teams), 2)
+    
+    salaries <- makeSchemaFromData(Salaries, name="salaries")
+    check.table.import(Salaries, salaries, "salaries")
+    
+    baseball.teams <- append(baseball.teams, salaries)
+    
+    expect_equal(length(baseball.teams), 3)
+    
+    #relationships
+    
+    relationship(baseball.teams, from="team_franch", to="teams") <- franchID ~ franchID
+    check.direct.keys(baseball.teams,  from="team_franch", to="teams", key.name="franchID", orig.obj=teams)
+    
+    relationship(baseball.teams, from="teams", to="salaries") <- teamID ~ teamID
 })
+
 
 test_that("Create and work with Database objects",
 {

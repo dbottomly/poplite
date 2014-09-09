@@ -14,7 +14,8 @@
 \alias{columns,TableSchemaList-method}
 \alias{length}
 \alias{length,TableSchemaList-method}
-\alias{'relationship<-',TableSchemaList-method}
+\alias{relationship<-}
+\alias{relationship<-,TableSchemaList-method}
 \alias{tables}
 \alias{tables,TableSchemaList-method}
 
@@ -47,7 +48,7 @@ Objects can be created by calls of the form \code{new("TableSchemaList", tab.lis
     \item{createTable}{\code{signature(obj = "TableSchemaList")}, table.name, mode=c("normal", "merge"): Produces a create table statement based on the table specified in \code{table.name} and whether the table should be temporary for merging purposes or normal permanent table}
     \item{insertStatement}{\code{signature(obj = "TableSchemaList")}, table.name, mode=c("normal", "merge"): Produces an insert statement based on the table specified in \code{table.name} and whether the table should be temporary for merging purposes or normal permanent table.  This insert statement will be used in conjunction with \code{dbGetPreparedQuery} in the RSQLite package and the \code{data.frame} resulting from the \code{dta.func} function to populate the initial database table.}
     \item{mergeStatement}{\code{signature(obj = "TableSchemaList")}, table.name: Produces a statement joining an existing table and a temporary one and inserting into a new (non-temporary) tables}
-	\item{relationship<-}{\code{signature(obj = "TableSchemaList")}, from, to, value: Provides a mechanism to specify how two tables are connected to each other in a database.  The arguments \code{from} and \code{to} should refer to tables in the specified \code{TableSchemaList}.  The value should be a formula describing how the column(s) correspond to each other.  The special value '.' refers to the autoincremented integer column if applicable.  The simplest use would be to specify that two tables should be joined on the same column (e.g. \code{column1~column1}).  Another typical use would be two say that the combination of one or more columns in one table should uniquely identify a row in another table (e.g. \code{.~column1+column2}).}
+	\item{'relationship<-'}{\code{signature(obj = "TableSchemaList")}, from, to, value: Provides a mechanism to specify how two tables are connected to each other in a database.  The arguments \code{from} and \code{to} should refer to tables in the specified \code{TableSchemaList}.  The value should be a formula describing how the column(s) correspond to each other.  The special value '.' refers to the autoincremented integer column if applicable.  The simplest use would be to specify that two tables should be joined on the same column (e.g. \code{column1~column1}).  Another typical use would be two say that the combination of one or more columns in one table should uniquely identify a row in another table (e.g. \code{.~column1+column2}).}
 
 }}
 
