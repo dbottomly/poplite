@@ -19,22 +19,22 @@ check.table.import <- function(dta, tbsl, name, pks=paste(name, "ind", sep="_"))
 }
 
 #these are simple relationships so the keys will be equivalent and there should be no modifications of columns etc
-check.direct.keys <- function(tbsl, from, to, key.name, orig.obj)
+check.direct.keys <- function(tbsl, from, to, key.name, orig.to.obj, orig.from.obj)
 {
     expect_named(tbsl@tab.list[[to]]$foreign.keys, from)
     expect_identical(tbsl@tab.list[[to]]$foreign.keys[[from]]$local.keys, tbsl@tab.list[[to]]$foreign.keys[[from]]$ext.keys)
     
     expect_identical(tbsl@tab.list[[to]]$foreign.keys[[from]]$local.keys, key.name)
     
-    expect_identical(tbsl@tab.list[[to]]$db.col, orig.obj@tab.list[[to]]$db.col)
-    expect_identical(tbsl@tab.list[[to]]$db.schema, orig.obj@tab.list[[to]]$db.schema)
+    expect_identical(tbsl@tab.list[[to]]$db.col, orig.to.obj@tab.list[[to]]$db.col)
+    expect_identical(tbsl@tab.list[[to]]$db.schema, orig.to.obj@tab.list[[to]]$db.schema)
     
-    expect_identical(tbsl@tab.list[[from]]$db.col, orig.obj@tab.list[[from]]$db.col)
-    expect_identical(tbsl@tab.list[[from]]$db.schema, orig.obj@tab.list[[from]]$db.schema)
+    expect_identical(tbsl@tab.list[[from]]$db.col, orig.from.obj@tab.list[[from]]$db.col)
+    expect_identical(tbsl@tab.list[[from]]$db.schema, orig.from.obj@tab.list[[from]]$db.schema)
 }
 
 
-test_that("Create and work with TBSL object",
+test_that("Create and work with TBSL and Database objects in a basic sense",
 {
     #makeSchemaFromData, append and length
     
@@ -66,24 +66,98 @@ test_that("Create and work with TBSL object",
     #relationships
     
     relationship(baseball.teams, from="team_franch", to="teams") <- franchID ~ franchID
-    check.direct.keys(baseball.teams,  from="team_franch", to="teams", key.name="franchID", orig.obj=teams)
+    check.direct.keys(baseball.teams,  from="team_franch", to="teams", key.name="franchID", orig.to.obj=teams, orig.from.obj=franches)
     
     relationship(baseball.teams, from="teams", to="salaries") <- teamID ~ teamID
-})
-
-
-test_that("Create and work with Database objects",
-{
+    check.direct.keys(baseball.teams,  from="teams", to="salaries", key.name="teamID", orig.to.obj=salaries, orig.from.obj=teams)
+    
+    #helpers for TableSchemaLists
+    
+    col.list <- columns(baseball.teams)
+    
+    expect_named(col.list, c("team_franch", "teams", "salaries"))
+    expect_equal(col.list, list(team_franch=c("team_franch_ind", names(TeamsFranchises)), teams=c("teams_ind", names(Teams)), salaries=c("salaries_ind", names(Salaries))))
+    
+    expect_equal(tables(baseball.teams), c("team_franch", "teams", "salaries"))
+    
+    #Basic formation and checks of Database objects
+    
+    baseball.db <- Database(baseball.teams, "test_baseball_db.db")
+    
     #columns
+    
+    expect_equal(columns(baseball.db), columns(baseball.teams))
     
     #tables
     
+    expect_equal(tables(baseball.db), tables(baseball.teams))
+    
     #dbFile
+    
+    expect_equal(dbFile(baseball.db), "test_baseball_db.db")
     
     #schema
     
-    #filter
+    expect_equal(schema(baseball.db)@tab.list, baseball.teams@tab.list)
     
+    #maybe not the best way to do this, though haven't seen another aside from re-creating the object
+    assign(x="baseball.db", value=baseball.db, envir=.GlobalEnv)
+})
+
+test_that("Another, more complex TBSL example based off a sample tracking use case",{
+    
+    db.list <- test.db.1()
+    
+    sample.tracking <- new("TableSchemaList")
+    
+    clinical <- makeSchemaFromData(db.list$clinical, name="clinical")
+    check.table.import(db.list$clinical, clinical, "clinical")
+    
+    sample.tracking <- append(sample.tracking, clinical)
+    
+    expect_equal(length(sample.tracking), 1)
+    
+    #this one should fail due to ng.ul column
+    expect_error(makeSchemaFromData(db.list$dna, name="dna"))
+    
+    db.list$dna <- correct.df.names(db.list$dna)
+    
+    dna <- makeSchemaFromData(db.list$dna, name="dna")
+    check.table.import(db.list$dna, dna, "dna")
+    
+    sample.tracking <- append(sample.tracking, dna)
+    
+    samples <- makeSchemaFromData(db.list$samples, name="samples")
+    check.table.import(db.list$samples, samples, "samples")
+    
+    sample.tracking <- append(sample.tracking, samples)
+    
+    expect_equal(length(sample.tracking), 3)
+    
+    #more complicated usage of relationship
+    
+    relationship(sample.tracking, from="clinical", to="samples") <- sample_id~sample_id
+    check.direct.keys(sample.tracking,  from="clinical", to="samples", key.name="sample_id", orig.to.obj=samples, orig.from.obj=clinical)
+    
+    relationship(sample.tracking, from="clinical", to="dna") <-sample_id~sample_id
+    check.direct.keys(sample.tracking,  from="clinical", to="dna", key.name="sample_id", orig.to.obj=dna, orig.from.obj=clinical)
+    
+    relationship(sample.tracking, from="samples", to="dna") <- .~sample_id+wave
+    
+})
+
+test_that("Database population",{
+    
+    #simple example first
+    columns(baseball.db)
+})
+
+test_that("Querying with Database objects",
+{
+    columns(baseball.db)
+    #onto querying Database objects, probably do this after testing populate in a different function
+    
+    #filter
     
     #select
     
