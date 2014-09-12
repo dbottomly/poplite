@@ -142,8 +142,110 @@ test_that("Another, more complex TBSL example based off a sample tracking use ca
     relationship(sample.tracking, from="clinical", to="dna") <-sample_id~sample_id
     check.direct.keys(sample.tracking,  from="clinical", to="dna", key.name="sample_id", orig.to.obj=dna, orig.from.obj=clinical)
     
-    relationship(sample.tracking, from="samples", to="dna") <- .~sample_id+wave
+    #Here, db.cols (and db.schema) should be modified so that sample and wave in samples should be replaced with dna's autoinc pk
+    relationship(sample.tracking, from="dna", to="samples") <- .~sample_id+wave
+    #if there was no clinical to samples rels would expect below however will need to keep sample_id to be consistent with other relationships
+    #expect_equal(sort(sample.tracking@tab.list$samples$db.cols), sort(c("samples_ind", "dna_ind", names(db.list$samples)[names(db.list$samples) %in% c("sample_id", "wave")==F])))
     
+    expect_equal(sort(sample.tracking@tab.list$samples$db.cols), sort(c("samples_ind", "dna_ind", names(db.list$samples)[names(db.list$samples) %in% "wave"==F])))
+    
+    #this should not be true for dna
+    expect_equal(sort(sample.tracking@tab.list$dna$db.cols), sort(c("dna_ind", names(db.list$dna))))
+    
+    #also check that the keys look sane
+    expect_named(sample.tracking@tab.list$samples$foreign.keys, c("clinical", "dna"))
+    
+    #should just be the direct keys for clinical
+    expect_equal(sample.tracking@tab.list$samples$foreign.keys$clinical, list(local.keys="sample_id", ext.keys="sample_id"))
+    
+    #should be sample_id and wave as well as dna's pk
+    
+    expect_equal(sample.tracking@tab.list$samples$foreign.keys$dna, list(local.keys="dna_ind", ext.keys=c("sample_id", "wave")))
+    
+    assign(x="sample.tracking",  value=sample.tracking, envir=.GlobalEnv)
+})
+
+test_that("createTable",
+{
+    tbsl <- sample.tracking
+    
+    valid.tables <- names(tbsl@tab.list)
+    
+    db.con <- dbConnect(SQLite(), tempfile())
+    
+    for(i in valid.tables)
+    {
+        print(i)
+        for (j in c("normal", "merge"))
+        {
+            print(j)
+            
+            f.keys <- tbsl@tab.list[[i]]$foreign.keys
+            
+            #if there are no foreign keys available, don't allow create table statements to be generated
+            if (j == "merge" && poplite:::shouldMerge(tbsl, i)==F)
+            {
+                expect_error(createTable(tbsl, table.name=i, mode="merge"))
+            }
+            else
+            {
+                if (is.null(f.keys) || j == "normal")
+                {
+                    add.cols <- character(0)
+                    add.type <- character(0)
+                    add.pk <- integer(0)
+                }
+                else
+                {
+                    #the basic table should already exist so can retrieve the previous info on coltypes
+                    
+                    temp.prag <- do.call("rbind", lapply(names(f.keys), function(x)
+                           {
+                                dbGetQuery(db.con, paste("pragma table_info(",x,")"))
+                           }))
+                    
+                    key.vals <- as.character(unlist(sapply(f.keys, "[[", "ext.keys")))
+                    key.prag <- temp.prag[temp.prag$name %in% key.vals,]
+                    add.cols <- key.prag$name
+                    add.type <- key.prag$type
+                    add.pk <- rep(0L, length(add.type))
+                }
+                
+                prag.tab.name <- ifelse(j=="merge", paste0(i, "_temp"), i)
+                
+                expect_true(is.null(dbGetQuery(db.con, createTable(tbsl, table.name=i, mode=j))))
+                tab.prag <- dbGetQuery(db.con, paste("pragma table_info(",prag.tab.name,")"))
+                sub.prag <- tab.prag[,c("name", "type", "pk")]
+                
+                col.types <- sapply(strsplit(tbsl@tab.list[[i]]$db.schema, "\\s+"), "[", 1)
+                col.names <- tbsl@tab.list[[i]]$db.cols
+                is.pk <- as.integer(grepl("PRIMARY KEY", tbsl@tab.list[[i]]$db.schema))
+                
+                col.names <- append(col.names, add.cols)
+                col.types <- append(col.types, add.type)
+                is.pk <- append(is.pk, add.pk)
+                
+                query.dta <- data.frame(name=col.names, type=col.types, pk=is.pk, stringsAsFactors=FALSE)
+                
+                if (j == "merge")
+                {
+                    #need to add in constrains similar to shouldMerge here...
+                    query.dta <- query.dta[query.dta$pk == 0 & query.dta$name %in% sapply(f.keys, "[[", "local.keys") == FALSE,]
+                }
+                
+                ord.prag <- sub.prag[do.call("order", sub.prag),]
+                ord.query <- query.dta[do.call("order", query.dta),]
+                
+                rownames(ord.prag) <- NULL
+                rownames(ord.query) <- NULL
+                
+                expect_equal(ord.prag, ord.query)
+            }
+        }
+        
+    }
+    
+    dbDisconnect(db.con)
 })
 
 test_that("Database population",{
@@ -242,87 +344,7 @@ test_that("Querying with Database objects",
 
 
 
-#test_that("createTable",
-#{
-#    tbsl <- new("TableSchemaList")
-#    
-#    valid.tables <- names(tbsl@tab.list)
-#    
-#    db.con <- dbConnect(SQLite(), tempfile())
-#    
-#    for(i in valid.tables)
-#    {
-#        print(i)
-#        for (j in c("normal", "merge"))
-#        {
-#            print(j)
-#            
-#            f.keys <- tbsl@tab.list[[i]]$foreign.keys
-#            
-#            #if there are no foreign keys available, don't allow create table statements to be generated
-#            if (j == "merge" && is.null(f.keys))
-#            {
-#                checkException(createTable(tbsl, table.name=i, mode="merge"))
-#            }
-#            else
-#            {
-#                if (is.null(f.keys) || j == "normal")
-#                {
-#                    add.cols <- character(0)
-#                    add.type <- character(0)
-#                    add.pk <- integer(0)
-#                }
-#                else
-#                {
-#                    #the basic table should already exist so can retrieve the previous info on coltypes
-#                    
-#                    temp.prag <- do.call("rbind", lapply(names(f.keys), function(x)
-#                           {
-#                                dbGetQuery(db.con, paste("pragma table_info(",x,")"))
-#                           }))
-#                    
-#                    key.vals <- as.character(unlist(sapply(f.keys, "[[", "ext.keys")))
-#                    key.prag <- temp.prag[temp.prag$name %in% key.vals,]
-#                    add.cols <- key.prag$name
-#                    add.type <- key.prag$type
-#                    add.pk <- rep(0L, length(add.type))
-#                }
-#                
-#                prag.tab.name <- ifelse(j=="merge", paste0(i, "_temp"), i)
-#                
-#                checkTrue(is.null(dbGetQuery(db.con, createTable(tbsl, table.name=i, mode=j))))
-#                tab.prag <- dbGetQuery(db.con, paste("pragma table_info(",prag.tab.name,")"))
-#                sub.prag <- tab.prag[,c("name", "type", "pk")]
-#                
-#                col.types <- sapply(strsplit(tbsl@tab.list[[i]]$db.schema, "\\s+"), "[", 1)
-#                col.names <- tbsl@tab.list[[i]]$db.cols
-#                is.pk <- as.integer(grepl("PRIMARY KEY", tbsl@tab.list[[i]]$db.schema))
-#                
-#                col.names <- append(col.names, add.cols)
-#                col.types <- append(col.types, add.type)
-#                is.pk <- append(is.pk, add.pk)
-#                
-#                query.dta <- data.frame(name=col.names, type=col.types, pk=is.pk, stringsAsFactors=FALSE)
-#                
-#                if (j == "merge")
-#                {
-#                    query.dta <- query.dta[query.dta$pk == 0 & query.dta$name %in% sapply(f.keys, "[[", "local.keys") == FALSE,]
-#                }
-#                
-#                ord.prag <- sub.prag[do.call("order", sub.prag),]
-#                ord.query <- query.dta[do.call("order", query.dta),]
-#                
-#                rownames(ord.prag) <- NULL
-#                rownames(ord.query) <- NULL
-#                
-#                checkEquals(ord.prag, ord.query)
-#            }
-#        }
-#        
-#    }
-#    
-#    dbDisconnect(db.con)
-#}
+
 #
 #test.insertStatement <- function()
 #{
