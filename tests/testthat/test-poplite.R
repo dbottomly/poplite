@@ -197,7 +197,7 @@ test_that("createTable",
                 }
                 else
                 {
-                    #the basic table should already exist so can retrieve the previous info on coltypes
+                    #the basic table should already exist so can retrieve the previous info on coltyps
                     
                     temp.prag <- do.call("rbind", lapply(names(f.keys), function(x)
                            {
