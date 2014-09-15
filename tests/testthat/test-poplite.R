@@ -230,7 +230,16 @@ test_that("createTable",
                 if (j == "merge")
                 {
                     #need to add in constrains similar to shouldMerge here...
-                    query.dta <- query.dta[query.dta$pk == 0 & query.dta$name %in% sapply(f.keys, "[[", "local.keys") == FALSE,]
+                    keep.cols <- unlist(lapply(f.keys, function(x)
+                           {
+                                if (length(intersect(x$local.keys, x$ext.keys)) == length(union(x$local.keys, x$ext.keys)))
+                                {
+                                    return(x$local.keys)
+                                }else{
+                                    return(NULL)
+                                }
+                           }))
+                    query.dta <- query.dta[query.dta$pk == 0 & query.dta$name %in% keep.cols == TRUE,]
                 }
                 
                 ord.prag <- sub.prag[do.call("order", sub.prag),]
@@ -238,6 +247,9 @@ test_that("createTable",
                 
                 rownames(ord.prag) <- NULL
                 rownames(ord.query) <- NULL
+                
+                print(ord.prag)
+                print(ord.query)
                 
                 expect_equal(ord.prag, ord.query)
             }
