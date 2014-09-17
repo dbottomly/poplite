@@ -270,137 +270,133 @@ test_that("createTable",
     dbDisconnect(db.con)
 })
 
-#test.insertStatement <- function()
-#{
-#    set.seed(123)
-#    
-#    tbsl <- new("TableSchemaList")
-#    
-#    valid.tables <- names(tbsl@tab.list)
-#    
-#    db.con <- dbConnect(SQLite(), tempfile())
-#    
-#    for(i in valid.tables)
-#    {
-#        print(i)
-#        for(j in c("normal", "merge"))
-#        {
-#            print(j)
-#            f.keys <- tbsl@tab.list[[i]]$foreign.keys
-#            
-#            if (j == "merge" && is.null(f.keys))
-#            {
-#                checkException(insertStatement(tbsl, i, j))
-#            }
-#            else
-#            {
-#                #first create the tables
-#                checkTrue(is.null(dbGetQuery(db.con, createTable(tbsl, table.name=i, mode=j))))
-#                
-#                prag.tab.name <- ifelse(j=="merge", paste0(i, "_temp"), i)
-#                tab.prag <- dbGetQuery(db.con, paste("pragma table_info(",prag.tab.name,")"))
-#                
-#                #create a couple lines of fake data to insert into the database
-#                
-#                ins.dta <- as.data.frame(matrix(sample.int(10000, 10*nrow(tab.prag)), ncol=nrow(tab.prag), nrow=10, dimnames=list(NULL, tab.prag$name)), stringsAsFactors=fALSE)
-#                
-#                for(p in colnames(ins.dta))
-#                {
-#                    if (tab.prag$type[tab.prag$name == p] == "TEXT")
-#                    {
-#                        ins.dta[,p]  <- as.character(ins.dta[,p])
-#                    }
-#                }
-#                
-#                #load into the database
-#                
-#                dbBeginTransaction(db.con)
-#                checkTrue(is.null(dbGetPreparedQuery(db.con, insertStatement(tbsl, i, mode=j), bind.data = ins.dta)))
-#                dbCommit(db.con)
-#                
-#                #check whether it respects should.ignore
-#                
-#                ignore.match <- regexpr(pattern="INSERT\\s+OR\\s+IGNORE", text=insertStatement(tbsl, i, mode=j), perl=TRUE)
-#                
-#                if (tbsl@tab.list[[i]]$should.ignore)
-#                {
-#                    checkTrue(ignore.match != -1)
-#                }
-#                else
-#                {
-#                    checkTrue(ignore.match == -1)
-#                }
-#            }
-#        }
-#    }
-#    
-#    dbDisconnect(db.con)
-#}
+test_that("insertStatement", {
+    set.seed(123)
+    
+    tbsl <- sample.tracking
+    
+    valid.tables <- names(tbsl@tab.list)
+    
+    db.con <- dbConnect(SQLite(), tempfile())
+    
+    for(i in valid.tables)
+    {
+        print(i)
+        for(j in c("normal", "merge"))
+        {
+            print(j)
+            f.keys <- tbsl@tab.list[[i]]$foreign.keys
+            
+            if (j == "merge" && poplite:::shouldMerge(tbsl, i)==F)
+            {
+                expect_error(insertStatement(tbsl, i, j))
+            }
+            else
+            {
+                #first create the tables
+                expect_true(is.null(dbGetQuery(db.con, createTable(tbsl, table.name=i, mode=j))))
+                
+                prag.tab.name <- ifelse(j=="merge", paste0(i, "_temp"), i)
+                tab.prag <- dbGetQuery(db.con, paste("pragma table_info(",prag.tab.name,")"))
+                
+                #create a couple lines of fake data to insert into the database
+                
+                ins.dta <- as.data.frame(matrix(sample.int(10000, 10*nrow(tab.prag)), ncol=nrow(tab.prag), nrow=10, dimnames=list(NULL, tab.prag$name)), stringsAsFactors=fALSE)
+                
+                for(p in colnames(ins.dta))
+                {
+                    if (tab.prag$type[tab.prag$name == p] == "TEXT")
+                    {
+                        ins.dta[,p]  <- as.character(ins.dta[,p])
+                    }
+                }
+                
+                #load into the database
+                
+                dbBeginTransaction(db.con)
+                expect_true(is.null(dbGetPreparedQuery(db.con, insertStatement(tbsl, i, mode=j), bind.data = ins.dta)))
+                dbCommit(db.con)
+                
+                #check whether it respects should.ignore
+                
+                ignore.match <- regexpr(pattern="INSERT\\s+OR\\s+IGNORE", text=insertStatement(tbsl, i, mode=j), perl=TRUE)
+                
+                if (tbsl@tab.list[[i]]$should.ignore)
+                {
+                    expect_true(ignore.match != -1)
+                }
+                else
+                {
+                    expect_true(ignore.match == -1)
+                }
+            }
+        }
+    }
+    
+    dbDisconnect(db.con)
+})
 
-#
-#test.mergeStatement <- function()
-#{  
-#    tbsl <- new("TableSchemaList")
-#    
-#    valid.tables <- names(tbsl@tab.list)
-#    
-#    for(i in valid.tables)
-#    {
-#        #again if there are no foreign keys make sure the query dies
-#        f.keys <- tbsl@tab.list[[i]]$foreign.keys
-#        print(i)
-#        if (is.null(f.keys))
-#        {
-#            checkException(mergeStatement(tbsl, i))
-#        }
-#        else
-#        {
-#            cur.stat <- mergeStatement(tbsl, i)
-#            
-#            #is the table definition consistent
-#            
-#            tab.match <- regexpr(pattern=paste0(i, "\\s+\\(\\s+([\\w+_,]+)\\s+\\)"), text=cur.stat, perl=TRUE)
-#            tab.str <- substr(cur.stat, start=attr(tab.match, "capture.start"), stop=attr(tab.match, "capture.start")+attr(tab.match, "capture.length")-1)
-#            split.tab <- strsplit(tab.str, ",")[[1]]
-#            
-#            tab.cols <- tbsl@tab.list[[i]]$db.cols
-#            tab.cols <- tab.cols[tbsl@tab.list[[i]]$db.schema != "INTEGER PRIMARY KEY AUTOINCREMENT"]
-#            
-#            checkTrue(length(intersect(split.tab, tab.cols)) == length(union(split.tab, tab.cols)))
-#            
-#            #is the select statement consistent with the table definition
-#            
-#            select.match <- regexpr(pattern=paste0("SELECT\\s+", tab.str), text=cur.stat, perl=TRUE)
-#            
-#            checkTrue(select.match != -1)
-#            
-#            #are the joins sane
-#            
-#            join.base <- sapply(f.keys, function(x) paste0("\\(", paste(x$ext.keys, collapse=","), "\\)"))
-#            
-#            join.str <- paste0(i, "_temp\\s+", paste(paste("JOIN", names(join.base), "USING", join.base, sep="\\s+"), collapse="\\s+"))
-#            
-#            join.match <- regexpr(pattern=join.str, text=cur.stat, perl=TRUE)
-#            
-#            checkTrue(join.match != -1)
-#            
-#            #is it respecting should.ignore
-#            
-#            ignore.match <- regexpr(pattern="INSERT\\s+OR\\s+IGNORE", text=cur.stat, perl=TRUE)
-#            
-#            if (tbsl@tab.list[[i]]$should.ignore)
-#            {
-#                checkTrue(ignore.match != -1)
-#            }
-#            else
-#            {
-#                checkTrue(ignore.match == -1)
-#            }
-#        }
-#    }
-#}
-#
-
+test_that("mergeStatement",
+{  
+    tbsl <- sample.tracking
+    
+    valid.tables <- names(tbsl@tab.list)
+    
+    for(i in valid.tables)
+    {
+        #again if there are no foreign keys make sure the query dies
+        f.keys <- tbsl@tab.list[[i]]$foreign.keys
+        print(i)
+        if (is.null(f.keys))
+        {
+            expect_error(mergeStatement(tbsl, i))
+        }
+        else
+        {
+            cur.stat <- mergeStatement(tbsl, i)
+            
+            #is the insert statement table definition consistent
+            
+            tab.match <- regexpr(pattern=paste0(i, "\\s+\\(\\s+([\\w+_,]+)\\s+\\)"), text=cur.stat, perl=TRUE)
+            tab.str <- substr(cur.stat, start=attr(tab.match, "capture.start"), stop=attr(tab.match, "capture.start")+attr(tab.match, "capture.length")-1)
+            split.tab <- strsplit(tab.str, ",")[[1]]
+            
+            tab.cols <- tbsl@tab.list[[i]]$db.cols
+            tab.cols <- tab.cols[tbsl@tab.list[[i]]$db.schema != "INTEGER PRIMARY KEY AUTOINCREMENT"]
+            
+            expect_true(length(intersect(split.tab, tab.cols)) == length(union(split.tab, tab.cols)))
+            
+            #is the select statement consistent with the insert statement table definition
+            
+            select.match <- regexpr(pattern=paste0("SELECT\\s+", tab.str), text=cur.stat, perl=TRUE)
+            
+            expect_true(select.match != -1)
+            
+            #are the joins sane
+            
+            join.base <- sapply(f.keys, function(x) paste0("\\(", paste(x$ext.keys, collapse=","), "\\)"))
+            
+            join.str <- paste0(i, "_temp\\s+", paste(paste("JOIN", names(join.base), "USING", join.base, sep="\\s+"), collapse="\\s+"))
+            
+            join.match <- regexpr(pattern=join.str, text=cur.stat, perl=TRUE)
+            
+            expect_true(join.match != -1)
+            
+            #is it respecting should.ignore
+            
+            ignore.match <- regexpr(pattern="INSERT\\s+OR\\s+IGNORE", text=cur.stat, perl=TRUE)
+            
+            if (tbsl@tab.list[[i]]$should.ignore)
+            {
+                expect_true(ignore.match != -1)
+            }
+            else
+            {
+                expect_true(ignore.match == -1)
+            }
+        }
+    }
+})
 
 test_that("Database population",{
     
