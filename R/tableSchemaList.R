@@ -478,7 +478,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 	  })
 
 #Went with an S3 method here and for select for the S4 Database class to go with the S3 generics in dplyr
-filter.Database <- function(.data, ...)
+filter_.Database <- function(.data, ...)
 	  {
 	    #taken from the internal code of dplyr, the dots() function
 	    use.expr <- eval(substitute(alist(...)))
@@ -556,7 +556,7 @@ filter.Database <- function(.data, ...)
 	    return(eval(parse(text=use.statement)))
     }
     
-select.Database <- function(.data, ..., .tables=NULL)
+select_.Database <- function(.data, ..., .tables=NULL)
 {
     #taken from the internal code of dplyr, the dots() function
     use.expr <- eval(substitute(alist(...)))

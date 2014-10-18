@@ -33,6 +33,19 @@ check.direct.keys <- function(tbsl, from, to, key.name, orig.to.obj, orig.from.o
     expect_identical(tbsl@tab.list[[from]]$db.schema, orig.from.obj@tab.list[[from]]$db.schema)
 }
 
+convert.factors.to.strings <- function(dta)
+{
+    for(i in 1:ncol(dta))
+    {
+        if(class(dta[,i]) == "factor")
+        {
+            dta[,i] <- as.character(dta[,i])
+        }
+    }
+    
+    return(dta)
+}
+
 
 test_that("Create and work with TBSL and Database objects in a basic sense",
 {
@@ -82,7 +95,9 @@ test_that("Create and work with TBSL and Database objects in a basic sense",
     
     #Basic formation and checks of Database objects
     
-    baseball.db <- Database(baseball.teams, "test_baseball_db.db")
+    temp.db <- tempfile()
+    
+    baseball.db <- Database(baseball.teams, temp.db)
     
     #columns
     
@@ -94,7 +109,7 @@ test_that("Create and work with TBSL and Database objects in a basic sense",
     
     #dbFile
     
-    expect_equal(dbFile(baseball.db), "test_baseball_db.db")
+    expect_equal(dbFile(baseball.db), temp.db)
     
     #schema
     
@@ -367,8 +382,11 @@ test_that("mergeStatement",
             expect_true(length(intersect(split.tab, tab.cols)) == length(union(split.tab, tab.cols)))
             
             #is the select statement consistent with the insert statement table definition
-            
-            select.match <- regexpr(pattern=paste0("SELECT\\s+", tab.str), text=cur.stat, perl=TRUE)
+                ##need to take into account the specified tables for the statements.
+                ##for now will simply remove the table names, prior to checking.  If a problem in the future
+                ##can make sure such columns exist as well.
+                
+            select.match <- regexpr(pattern=paste0("SELECT\\s+", tab.str), text=gsub("[\\w_]+\\.", "", cur.stat, perl=T), perl=TRUE)
             
             expect_true(select.match != -1)
             
@@ -389,8 +407,7 @@ test_that("mergeStatement",
             if (tbsl@tab.list[[i]]$should.ignore)
             {
                 expect_true(ignore.match != -1)
-            }
-            else
+            }else
             {
                 expect_true(ignore.match == -1)
             }
@@ -401,99 +418,140 @@ test_that("mergeStatement",
 test_that("Database population",{
     
     #simple example first
-    columns(baseball.db)
+    
+    ins.vals <- list(team_franch=TeamsFranchises, teams=Teams, salaries=Salaries)
+    
+    #populate the entire database
+    
+    populate(baseball.db, ins.vals)
+    
+    #read back in each of the tables and make sure they are consistent with in memory data.frames
+    
+    test.con <- dbConnect(SQLite(), dbFile(baseball.db))
+    
+    expect_true(all(names(ins.vals) %in% dbListTables(test.con)))
+    
+    db.tab.list <- lapply(names(ins.vals), function(x)
+           {
+                dbReadTable(test.con, x)
+           })
+    
+    names(db.tab.list) <- names(ins.vals)
+    
+    #these should all have 'table_ind' columns
+    
+    for (i in names(db.tab.list))
+    {
+        expect_true(paste(i, "ind", sep="_") %in% names(db.tab.list[[i]]))
+    }
+    
+    #these relationships are all 'direct' keys so check for equivalence between the lists removing the 'table'_ind columns
+    
+    stripped.db.list <- lapply(db.tab.list, function(x) x[,-1])
+    fixed.ins <- lapply(ins.vals, convert.factors.to.strings)
+    
+    expect_equal(stripped.db.list,fixed.ins)
+    
+    dbDisconnect(test.con)
+    
+    #more complex example
+    
+    sample.tracking.db <- Database(sample.tracking, tempfile())
+    
+    samp.list <- test.db.1()
+    
+    #from above, this correction had to be done
+    samp.list$dna <- correct.df.names(samp.list$dna)
+    
+    populate(sample.tracking.db, samp.list)
+    
+    #again read in the db tables
+    
+    test.con <- dbConnect(SQLite(), dbFile(sample.tracking.db))
+    
+    expect_true(all(names(samp.list) %in% dbListTables(test.con)))
+    
+    db.tab.list <- lapply(names(samp.list), function(x)
+           {
+                dbReadTable(test.con, x)
+           })
+    
+    names(db.tab.list) <- names(samp.list)
+    
+    #all should have a 'table'_ind column
+    
+    for (i in names(db.tab.list))
+    {
+        expect_true(paste(i, "ind", sep="_") %in% names(db.tab.list[[i]]))
+    }
+    
+    #for clinical and dna, should just be the 'table'_ind columns as above
+    
+    stripped.db.list.1 <- lapply(db.tab.list[c('clinical', 'dna')], function(x) x[,-1])
+    fixed.samp.list <- lapply(samp.list , convert.factors.to.strings)
+    
+    expect_equal(stripped.db.list.1,fixed.samp.list[c('clinical', 'dna')], check.attributes=F)
+    
+    #for samples, will be both 'table'_ind column as well as a 'foreign table'_ind derived from dna and a 'direct' key from clinical
+    ##merge this table with dna to pull out the appropriate column
+    
+    test.samples <- samp.list[['samples']]
+    #add in the samples_ind in this case
+    test.samples$samples_ind <- 1:nrow(test.samples)
+    
+    test.dna <- samp.list[['dna']]
+    #it is simply autoincremented PK
+    test.dna$dna_ind <- 1:nrow(test.dna)
+    
+    test.samples.merge <- merge(test.samples, test.dna, all=F)
+    
+    test.samples.merge <- test.samples.merge[test.samples.merge$sample_id %in% samp.list$clinical$sample_id,]
+    test.samples.merge <- test.samples.merge[,names(db.tab.list[['samples']])]
+    test.samples.merge <- convert.factors.to.strings(test.samples.merge)
+    test.samples.merge <- test.samples.merge[do.call('order', test.samples.merge),]
+    
+    res.samples <- db.tab.list$samples
+    
+    res.samples <- res.samples[do.call('order', res.samples),]
+    
+    #remove the sample_inds here, as they don't really matter and seem to misalign, probably due to differences in assignment
+    
+    expect_equal(test.samples.merge[,-1], res.samples[,-1], check.attributes=F)
+    
+    dbDisconnect(test.con)
+    
+    assign(x="sample.tracking.db",  value=sample.tracking.db, envir=.GlobalEnv)
 })
 
 test_that("Querying with Database objects",
-{
-    columns(baseball.db)
-    #onto querying Database objects, probably do this after testing populate in a different function
+{   
+    #onto querying Database objects
+    #sample.tracking.db
     
-    #filter
+    #note, due to changes in dplyr, need to read up on lazy evaluation in order to make the below work...
     
-    #select
+    filter(sample.tracking.db, samples.sample_id == 1)
+    
+    expect_error(filter_(sample.tracking.db,sample_id == 1)
+    
+    filter_(sample.tracking.db, samples.sample_id == 1)
+    
+    select(sample.tracking.db, .tables="samples")
+    
+    #select(sang.db, .table="probe_info", fasta_name:align_status)
+    #select(sang.db, fasta_name:align_status)
+    #select(sang.db, probe_info.fasta_name:probe_info.align_status)
+    #select(sang.db, probe_info.fasta_name:align_status)
+    #
+    #select(sang.db, fasta_name:align_status,probe_chr:probe_end)
+    #
+    #select(sang.db, fasta_name:align_status,probe_chr:probe_end, seqnames:filter)
+    #
+    ##now add the same support for the table.column syntax to filter
+    #filter(sang.db, align_status == "UniqueMapped")
+    #filter(sang.db, probe_info.align_status == "UniqueMapped")
+    #filter(sang.db, kitten == 5 | (probe_info.align_status == "UniqueMapped" & probe_id == 179377))
     
     
 })
-
-#will not work for now until applicable data is available...
-#test.populate <- function()
-#{
-#    #populate a subset of the tbsl using the example data  
-#    
-#    .tc.func <- function(x)
-#    {
-#        temp.x <- x[!duplicated(x$Transcript.Cluster.ID),"Transcript.Cluster.ID", drop=FALSE]
-#        names(temp.x) <- "TC_ID"
-#        return(temp.x)
-#    }
-#    
-#    .probe.func <- function(x)
-#    {
-#        temp.x <- x[,c("Probe.ID", "probe.x", "probe.y", "Transcript.Cluster.ID")]
-#        names(temp.x) <- c("Probe_ID", "Probe_X", "Probe_Y", "TC_ID")
-#        return(temp.x)
-#    }
-#    
-#    tab.list <- list(transcript_cluster=list(db.cols=c("TC_PK", "TC_ID"),
-#                                db.schema=c("INTEGER PRIMARY KEY AUTOINCREMENT", "INTEGER"),
-#                                db.constr="",
-#                                dta.func=.tc.func, should.ignore=FALSE, foreign.keys=NULL),
-#        probe=list(db.cols=c("Probe_PK", "Probe_ID", "Probe_X", "Probe_Y", "TC_PK"),
-#                   db.schema=c("INTEGER PRIMARY KEY AUTOINCREMENT", "INTEGER", "INTEGER", "INTEGER", "INTEGER"),
-#                   db.constr="",
-#                   dta.func=.probe.func, should.ignore=FALSE, foreign.keys=list(transcript_cluster=list(ext.keys="TC_ID", local.keys="TC_PK"))))
-#    
-#    tbsl <- new("TableSchemaList", tab.list=tab.list)
-#    
-#    db.con <- dbConnect(SQLite(), tempfile())
-#    
-#    probe.tab.file <- om.tab.file()
-#    
-#    probe.tab <- read.delim(probe.tab.file, sep="\t", header=TRUE, stringsAsFactors=FALSE)
-#    
-#    populate.db.tbl.schema.list(db.con, db.schema=tbsl, ins.vals=probe.tab, use.tables=NULL, should.debug=TRUE)
-#
-#    test.query <- dbGetQuery(db.con, "SELECT Probe_ID, Probe_X, Probe_Y, TC_ID FROM probe JOIN transcript_cluster USING (TC_PK)")
-#    names(test.query) <- c("Probe.ID", "probe.x", "probe.y", "Transcript.Cluster.ID")
-#    
-#    test.query <- test.query[do.call("order", test.query),]
-#    rownames(test.query) <- NULL
-#    
-#    sub.probe.tab <- probe.tab[,c("Probe.ID", "probe.x", "probe.y", "Transcript.Cluster.ID")]
-#    sub.probe.tab <- sub.probe.tab[do.call("order", sub.probe.tab),]
-#    rownames(sub.probe.tab) <- NULL
-#    
-#    checkEquals(test.query, sub.probe.tab)
-#    
-#    dbDisconnect(db.con)
-#    
-#    #should be able to easily populate a single table without dependencies
-#    
-#    db.con <- dbConnect(SQLite(), tempfile())
-#    
-#    populate.db.tbl.schema.list(db.con, db.schema=tbsl, ins.vals=probe.tab, use.tables="transcript_cluster", should.debug=TRUE)
-#    
-#    comp.tab <- .tc.func(probe.tab)
-#    comp.tab <- cbind(TC_PK=1:nrow(comp.tab), comp.tab)
-#    rownames(comp.tab) <- NULL
-#    
-#    test.query.2 <- dbGetQuery(db.con, "SELECT * FROM transcript_cluster")
-#    
-#    checkEquals(comp.tab, test.query.2)
-#    
-#    dbDisconnect(db.con)
-#    
-#    #should throw an error if attempting to populate a table with dependencies
-#    
-#    db.con <- dbConnect(SQLite(), tempfile())
-#    checkException(populate.db.tbl.schema.list(db.con, db.schema=tbsl, ins.vals=probe.tab, use.tables="probe", should.debug=TRUE))
-#    
-#    dbDisconnect(db.con)
-#}
-
-
-
-
-#
 

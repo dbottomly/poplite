@@ -8,7 +8,7 @@ export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromDat
 tables, columns, SangerVarMask)
 
 #other functions
-export(correct.df.names, Database, filter.Database, select.Database)
+export(correct.df.names, Database, filter_.Database, select_.Database)
 
 #searchCols, searchDict, searchTables,
 exportClass(TableSchemaList, Database)
