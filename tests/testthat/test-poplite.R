@@ -537,6 +537,8 @@ test_that("Querying with Database objects",
                 dbReadTable(test.con, x)
            })
     
+    names(db.tab.list) <- tables(sample.tracking.db)
+    
     db.samps <- db.tab.list[["samples"]]
     
     #the .tables keyword should select all the columns on the given table
@@ -567,10 +569,33 @@ test_that("Querying with Database objects",
     expect_equal(as.data.frame(sub.samps), db.samps[,c("sample_id", "did_collect", "dna_ind")])
     
     #subsetting again without specifying tables
-    #'works' but needs to be limited only to the table which contains all the columns or die
     sub.samps.nt <- select(sample.tracking.db, sample_id:dna_ind)
     expect_equal(as.data.frame(sub.samps.nt), db.samps[,c("sample_id", "did_collect", "dna_ind")])
     
+    #shouldn't work if the subsetting is ambigous
+    
+    expect_error(select(sample.tracking.db, dna_ind))
+    
+    #will work if table is specified
+    
+    #either
+    
+    select(sample.tracking.db, dna.dna_ind)
+    
+    #or
+    
+    select(sample.tracking.db, dna_ind, .tables="dna")
+    
+    #can select columns across different tables
+    select(sample.tracking.db, sample_id:dna_ind, sample_id:status)
+    
+    #again specifying tables
+    
+    select(sample.tracking.db, samples.sample_id:dna_ind, clinical.sample_id:status)
+    
+    #or via the .tables mechanism
+    
+    select(sample.tracking.db, sample_id:dna_ind, sample_id:status, .tables=c("clinical", "samples"))
     
     #select(sang.db, fasta_name:align_status)
     #select(sang.db, probe_info.fasta_name:probe_info.align_status)

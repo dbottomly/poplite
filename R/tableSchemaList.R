@@ -623,7 +623,6 @@ select_.Database <- function(.data, .dots)
 	stop("ERROR: Please either supply desired columns (columns(.data)) or specify valid table(s) in .tables ('tables(.data)')")
     }else{
 	#attempt to figure out what the tables are from the specified columns...
-	browser()
 	use.col.list <- lapply(use.expr, function(x)
 			   {
 				expr.only <- x$expr
@@ -645,24 +644,48 @@ select_.Database <- function(.data, .dots)
 	
 	if(any(not.sup.tab))
 	{
-	    #
-	    #if no columns are specified, need to first try to find a table which contains all the columns
+	    tab.cols <- columns(.data)
 	    
-	    #otherwise a mix needs to attempt to disambiguiate
+	    #if no tables are specified, need to first try to find a table which contains all the columns
+	    tab.ord.mat <- sapply(tab.cols, function(x) sapply(use.col.list[not.sup.tab], function(y) all(rank(match(y, x), na.last=NA) == seq_along(y))))
 	    
-	    col.to.tab <- stack(columns(.data))
-	    
-	    spec.tabs <- unique(as.character(unlist(inp.tab.list[not.sup.tab==F])))
-	    non.spec.tabs <- sapply(use.col.list[not.sup.tab], "[", 1)
-	    
-	    diff.cols <- setdiff(non.spec.tabs, as.character(col.to.tab$values))
-	    
-	    if (length(diff.cols) > 0)
+	    if (is.matrix(tab.ord.mat) == F)
 	    {
-		stop(paste("ERROR: Provided column(s):", paste(diff.cols, collapse=","), "could not be found in the tables"))
+		tab.ord.mat <- matrix(tab.ord.mat, nrow=1, ncol=length(tab.ord.mat), dimnames=list(NULL, names(tab.cols)))
 	    }
 	    
-	    use.tables <- c(unique(as.character(col.to.tab$ind[as.character(col.to.tab$values) %in% non.spec.tabs])), spec.tabs)
+	    if (all(apply(tab.ord.mat, 1, any)))
+	    {
+		sel.tabs <- apply(tab.ord.mat, 2, any)
+		use.tables <- colnames(tab.ord.mat)[sel.tabs]
+		
+	    }else{
+		#otherwise the columns would need to be contiguous between multiple tables
+		##probably not going to be easy for user to specify, will throw an error for now...
+		
+		not.contig <- apply(tab.ord.mat, 1, any) == F
+		
+		stop(paste("ERROR: Column(s):",paste(sapply(use.expr[not.sup.tab][not.contig], function(x) deparse(x$expr)), collapse=","), "are not contiguous in any table.  Try specifying a table: e.g. 'tableX.columnY'"))
+	    }
+	    
+	    if(any(not.sup.tab==F))
+	    {
+		#a mix of specified and non-specified
+		##so add in the additional tables, if the columns exist...
+		
+		valid.cols <- mapply(function(cols, tabs)
+		       {
+			    return(all(rank(match(cols, tabs), na.last=NA) == seq_along(y)))
+		       }, use.col.list[not.sup.tab==F], tab.cols[inp.tab.list[not.sup.tab==F]])
+		
+		
+		if (all(valid.cols) == F)
+		{
+		    stop(paste("ERROR: Provided column(s):", paste(sapply(use.expr[not.sup.tab==F][valid.cols==F], function(x) deparse(x$expr)), collapse=","), "could not be found in the specified tables"))
+		}
+		
+		use.tables <- append(use.tables, unique(as.character(unlist(inp.tab.list))))
+	    }
 	    
 	}else{
 	    use.tables <- unique(as.character(unlist(inp.tab.list)))
