@@ -417,26 +417,48 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 	    
 	    if (length(needed.tables) > 1)
 	    {
-		db.con <- dbConnect(SQLite(), dbFile(obj))
-		
-		if (dbExistsTable(db.con, "temp_query"))
-		{
-		    dbGetQuery(db.con, "DROP TABLE temp_query");
-		}
+		#db.con <- dbConnect(SQLite(), dbFile(obj))
+		#
+		#if (dbExistsTable(db.con, "temp_query"))
+		#{
+		#    dbGetQuery(db.con, "DROP TABLE temp_query");
+		#}
 		
 		#use the TBSL object to determine how to join the tables and create a temporary table
+		if (length(needed.tables) < length(tables(obj)))
+		{
+		    start.node <- get.starting.point(schema(obj), needed.tables)
 		
-		start.node <- get.starting.point(schema(obj), needed.tables)
+		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=T)
+		    
+		    valid.path <- sapply(table.path, function(x) all(needed.tables %in% x))
+		    
+		    if (all(valid.path == F))
+		    {
+			stop("ERROR: Cannot determine how to join tables, query cannot be carried out")
+		    }
+		    
+		    min.valid.path <- which.min(sapply(table.path[valid.path], length))
+		    
+		    use.path <- table.path[valid.path][[min.valid.path]]
+		}else{
+		    use.path <- needed.tables   
+		}
 		
-		table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=T)
-		
-		valid.path <- sapply(table.path, function(x) all(needed.tables %in% x))
-		
-		min.valid.path <- which.min(sapply(table.path[valid.path], length))
-		
-		use.path <- table.path[valid.path][[min.valid.path]]
-		
-		join.cols <- sapply(1:(length(use.path)-1), function(x) {
+		#the joining needs to take into account not just the direct keys from one table to the next but also the necessary
+		#keys if one table has already been merged to another...
+		join.cols <- lapply(1:(length(use.path)-1), function(x) {
+		    
+		    if (x > 1)
+		    {
+			next.path.keys <- foreignLocalKeyCols(schema(obj), use.path[x+1], use.path[1:(x-1)])
+			if (length(next.path.keys) > 0)
+			{
+			    add.keys <- unlist(next.path.keys)
+			}
+		    }else{
+			add.keys <- NULL
+		    }
 		    
 		    for.join <- foreignLocalKeyCols(schema(obj), use.path[x], use.path[x+1])
 		    if (is.null(for.join))
@@ -449,39 +471,50 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 			}
 			else
 			{
-			    return(paste(back.join, collapse=","))
+			    return(append(back.join, add.keys))
 			}
 		    }
 		    else
 		    {
-			return(paste(for.join, collapse=","))
+			return(append(for.join, add.keys))
 		    }
 		})
 		
-		#use all but the first and last of these
+		#was:
+		#use.query <- paste(paste("CREATE TABLE temp_query AS SELECT * FROM", use.path[1], paste(paste("JOIN",use.path[-1],"USING (", join.cols,")"), collapse=" ")))
+		#dbGetQuery(db.con, use.query)
+		#dbDisconnect(db.con)
 		
-		use.query <- paste(paste("CREATE TABLE temp_query AS SELECT * FROM", use.path[1], paste(paste("JOIN",use.path[-1],"USING (", join.cols,")"), collapse=" ")))
-		dbGetQuery(db.con, use.query)
+		#now using dplyr::inner_join(x,y,by=NULL)
 		
-		dbDisconnect(db.con)
+		src.db <- src_sqlite(dbFile(obj), create = F)
 		
-		my_db <- src_sqlite(dbFile(obj), create = F)
-		my_db_tbl <- tbl(my_db, "temp_query")
+		all.tab <- tbl(src.db, use.path[1])
+		
+		use.path <- use.path[-1]
+		
+		for(i in seq_along(use.path))
+		{
+		    all.tab <- inner_join(all.tab, tbl(src.db,use.path[i]), by=join.cols[[i]])
+		}
 		
 	    }else{
 		my_db <- src_sqlite(dbFile(obj), create = F)
-		my_db_tbl <- tbl(my_db, needed.tables)
+		all.tab <- tbl(my_db, needed.tables)
 	    }
 	    
-	    return(my_db_tbl)
+	    return(all.tab)
 	  
 	  })
 
 #Went with an S3 method here and for select for the S4 Database class to go with the S3 generics in dplyr
-filter_.Database <- function(.data, ...)
+filter_.Database <- function(.data, .dots)
 	  {
+	    #was this, need to change to below, due to changes to dplyr
 	    #taken from the internal code of dplyr, the dots() function
-	    use.expr <- eval(substitute(alist(...)))
+	    #use.expr <- eval(substitute(alist(...)))
+	    
+	    use.expr <- .dots
 	    
 	    if (length(use.expr) != 1)
 	    {
@@ -544,22 +577,33 @@ filter_.Database <- function(.data, ...)
 	    
 	    #carry out the filter method of dplyr on the temporary or otherwise table
 	    
-	    cur.stat <- paste(deparse(use.expr[[1]]), collapse=" ")
+	    cur.stat <- paste(deparse(use.expr[[1]]$expr), collapse=" ")
 	    
 	    for(i in needed.tables)
 	    {
 		cur.stat <- gsub(paste0(i, "."), "", cur.stat)
 	    }
-	    
+	   
 	    use.statement <- paste("filter(my_db_tbl,", cur.stat, ")")
 	    
 	    return(eval(parse(text=use.statement)))
     }
     
-select_.Database <- function(.data, ..., .tables=NULL)
+select_.Database <- function(.data, .dots)
 {
+    #check to see if .tables is part of .dots
+    
+    if('.tables' %in% names(.dots))
+    {
+	.tables <- lazy_eval(.dots$.tables)
+	.dots <- .dots[-which(names(.dots) == ".tables")]
+    }else{
+	.tables <- NULL
+    }
+    
     #taken from the internal code of dplyr, the dots() function
-    use.expr <- eval(substitute(alist(...)))
+    #use.expr <- eval(substitute(alist(...)))
+    use.expr <- .dots
     
     if (is.null(.tables) == F)
     {
@@ -572,22 +616,23 @@ select_.Database <- function(.data, ..., .tables=NULL)
 	    stop("ERROR: .tables needs to be a vector of table names use 'tables(.data)' for a listing")
 	}
 	
-	clean.cols <- sapply(use.expr, function(x) deparse(x))
+	clean.cols <- sapply(use.expr, function(x) deparse(x$expr))
 	
     }else if (length(use.expr) == 0 && is.null(.tables))
     {
 	stop("ERROR: Please either supply desired columns (columns(.data)) or specify valid table(s) in .tables ('tables(.data)')")
     }else{
 	#attempt to figure out what the tables are from the specified columns...
-	
+	browser()
 	use.col.list <- lapply(use.expr, function(x)
 			   {
-				if (length(x) == 1)
+				expr.only <- x$expr
+				if (length(expr.only) == 1)
 				{
-				    return(as.character(x))
-				}else if (length(x) == 3 && x[[1]] == ":")
+				    return(as.character(expr.only))
+				}else if (length(expr.only) == 3 && expr.only[[1]] == ":")
 				{
-				    return(sapply(x[2:3], as.character))
+				    return(sapply(expr.only[2:3], as.character))
 				}else{
 				    stop("ERROR: Accepted expression are of the form 'column' or 'column1':'columnN'")
 				}
@@ -600,6 +645,11 @@ select_.Database <- function(.data, ..., .tables=NULL)
 	
 	if(any(not.sup.tab))
 	{
+	    #
+	    #if no columns are specified, need to first try to find a table which contains all the columns
+	    
+	    #otherwise a mix needs to attempt to disambiguiate
+	    
 	    col.to.tab <- stack(columns(.data))
 	    
 	    spec.tabs <- unique(as.character(unlist(inp.tab.list[not.sup.tab==F])))
@@ -622,9 +672,9 @@ select_.Database <- function(.data, ..., .tables=NULL)
 				 {
 				    if (is.null(inp.tab.list[[x]])==F)
 				    {
-					return(gsub(paste0(inp.tab.list[[x]], "."), "", deparse(use.expr[[x]])))
+					return(gsub(paste0(inp.tab.list[[x]], "."), "", deparse(use.expr[[x]]$expr)))
 				    }else{
-					return(deparse(use.expr[[x]]))
+					return(deparse(use.expr[[x]]$expr))
 				    }
 				    
 				 })
@@ -637,7 +687,7 @@ select_.Database <- function(.data, ..., .tables=NULL)
     
     if (length(clean.cols) == 0)
     {
-	use.statement <- "select(my_db_tbl)"
+	use.statement <- "select(my_db_tbl, everything())"
     }else{
 	use.statement <- paste("select(my_db_tbl,", paste(clean.cols, collapse=","), ")")
     }
@@ -836,8 +886,10 @@ setMethod("foreignLocalKeyCols", signature("TableSchemaList"), function(obj, tab
 	    if (is.null(join.table))
 	    {
 		return(ret.list)
-	    }else{
+	    }else if (length(join.table) == 1){
 		return(ret.list[[join.table]])
+	    }else{
+		return(ret.list[join.table])
 	    }
             
           })

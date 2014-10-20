@@ -528,17 +528,50 @@ test_that("Querying with Database objects",
     #onto querying Database objects
     #sample.tracking.db
     
-    #note, due to changes in dplyr, need to read up on lazy evaluation in order to make the below work...
+    test.con <- dbConnect(SQLite(), dbFile(sample.tracking.db))
     
-    filter(sample.tracking.db, samples.sample_id == 1)
+    #start with some basic select queries
     
-    expect_error(filter_(sample.tracking.db,sample_id == 1)
+    db.tab.list <- lapply(tables(sample.tracking.db), function(x)
+           {
+                dbReadTable(test.con, x)
+           })
     
-    filter_(sample.tracking.db, samples.sample_id == 1)
+    db.samps <- db.tab.list[["samples"]]
     
-    select(sample.tracking.db, .tables="samples")
+    #the .tables keyword should select all the columns on the given table
+    all.samps <- select(sample.tracking.db, .tables="samples")
+    expect_equal(as.data.frame(all.samps), db.samps)
     
-    #select(sang.db, .table="probe_info", fasta_name:align_status)
+    #try specifying all the tables
+    
+    all.tab.join <- select(sample.tracking.db, .tables=tables(sample.tracking.db))
+    
+    merge.dta <- db.tab.list[[1]]
+    
+    for(i in seq_along(db.tab.list[-1]))
+    {
+        merge.dta <- merge(merge.dta, db.tab.list[-1][[i]])
+    }
+    
+    atj.dta <- convert.factors.to.strings(as.data.frame(all.tab.join)[,names(merge.dta)])
+    atj.dta <- atj.dta[do.call("order", atj.dta),]
+    
+    merge.dta <- convert.factors.to.strings(merge.dta)
+    merge.dta <- merge.dta[do.call("order", merge.dta),]
+    
+    expect_equal(atj.dta, merge.dta, check.attributes=F)
+    
+    #specifying table, couple of columns
+    sub.samps <- select(sample.tracking.db, sample_id:dna_ind,.tables="samples")
+    expect_equal(as.data.frame(sub.samps), db.samps[,c("sample_id", "did_collect", "dna_ind")])
+    
+    #subsetting again without specifying tables
+    #'works' but needs to be limited only to the table which contains all the columns or die
+    sub.samps.nt <- select(sample.tracking.db, sample_id:dna_ind)
+    expect_equal(as.data.frame(sub.samps.nt), db.samps[,c("sample_id", "did_collect", "dna_ind")])
+    
+    
     #select(sang.db, fasta_name:align_status)
     #select(sang.db, probe_info.fasta_name:probe_info.align_status)
     #select(sang.db, probe_info.fasta_name:align_status)
@@ -547,6 +580,19 @@ test_that("Querying with Database objects",
     #
     #select(sang.db, fasta_name:align_status,probe_chr:probe_end, seqnames:filter)
     #
+    
+    #onto filtering
+    
+    #this shouldn't work as the sample_id column is ambigous
+    expect_error(filter(sample.tracking.db,sample_id == 1))
+    
+    samp.1.filt <- filter(sample.tracking.db, samples.sample_id == 1)
+    samp.1.df <- as.data.frame(samp.1.filt)
+    
+    #check against the table itself
+    
+    expect_equal(samp.1.df, db.samps[db.samps$sample_id == 1,])
+    
     ##now add the same support for the table.column syntax to filter
     #filter(sang.db, align_status == "UniqueMapped")
     #filter(sang.db, probe_info.align_status == "UniqueMapped")

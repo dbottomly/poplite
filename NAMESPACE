@@ -2,6 +2,7 @@ import(methods)
 import(RSQLite)
 import(dplyr)
 import(RSQLite.extfuns)
+importFrom(lazyeval, lazy_eval)
 importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V)
 #methods
 export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-', schema, dbFile,
