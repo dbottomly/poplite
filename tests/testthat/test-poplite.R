@@ -580,31 +580,37 @@ test_that("Querying with Database objects",
     
     #either
     
-    select(sample.tracking.db, dna.dna_ind)
+    expect_equal(as.data.frame(select(sample.tracking.db, dna_ind, .tables="dna")), data.frame(db.tab.list$dna$dna_ind), check.attributes=F)
     
     #or
-    
-    select(sample.tracking.db, dna_ind, .tables="dna")
+    expect_equal(as.data.frame(select(sample.tracking.db, dna.dna_ind)), data.frame(db.tab.list$dna$dna_ind), check.attributes=F)
     
     #can select columns across different tables
-    select(sample.tracking.db, sample_id:dna_ind, sample_id:status)
+    
+    use.cols <- unique(append(names(db.tab.list$samples)[-1], c("sample_id", "sex", "age", "status")))
+    
+    two.tab.cols <- merge(db.tab.list$samples, db.tab.list$clinical, by="sample_id", all=F)
+    
+    nt.res <- as.data.frame(select(sample.tracking.db, sample_id:dna_ind, sample_id:status))
+    
+    expect_true(all(names(nt.res) %in% use.cols))
+    expect_equal(nt.res[,use.cols], two.tab.cols[,use.cols])
     
     #again specifying tables
     
-    select(sample.tracking.db, samples.sample_id:dna_ind, clinical.sample_id:status)
+    td.res <- as.data.frame(select(sample.tracking.db, samples.sample_id:dna_ind, clinical.sample_id:status))
     
-    #or via the .tables mechanism
+    expect_true(all(names(td.res) %in% use.cols))
+    expect_equal(td.res[,use.cols], two.tab.cols[,use.cols])
     
-    select(sample.tracking.db, sample_id:dna_ind, sample_id:status, .tables=c("clinical", "samples"))
+    #or via the .tables mechanism this should not work
     
-    #select(sang.db, fasta_name:align_status)
-    #select(sang.db, probe_info.fasta_name:probe_info.align_status)
-    #select(sang.db, probe_info.fasta_name:align_status)
-    #
-    #select(sang.db, fasta_name:align_status,probe_chr:probe_end)
-    #
-    #select(sang.db, fasta_name:align_status,probe_chr:probe_end, seqnames:filter)
-    #
+    expect_error(select(sample.tracking.db, sample_id:dna_ind, sample_id:status, .tables=c("clinical", "samples")))
+    
+    #there were a few additional ones, check whether mixed named, unnamed works
+    
+    #this doesn't work currently
+    nu.res <- as.data.frame(select(sample.tracking.db, samples.sample_id:dna_ind, sample_id:status))
     
     #onto filtering
     

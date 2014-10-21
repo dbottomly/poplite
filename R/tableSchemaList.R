@@ -410,28 +410,29 @@ Database <- function(tbsl, db.file)
 setGeneric("join", def=function(obj, ...) standardGeneric("join"))
 setMethod("join", signature("Database"), function(obj, needed.tables)
 	  {
-	    if (is.character(needed.tables) == F || all(needed.tables %in% tables(obj))==F)
+	    if (is.character(needed.tables) == F || (all(needed.tables %in% tables(obj))==F && all(names(needed.tables %in% tables(obj))) == F))
 	    {
 		stop("ERROR: needed.tables needs to be a character vector corresponding to table names")
 	    }
 	    
+	    browser()
+	    
 	    if (length(needed.tables) > 1)
 	    {
-		#db.con <- dbConnect(SQLite(), dbFile(obj))
-		#
-		#if (dbExistsTable(db.con, "temp_query"))
-		#{
-		#    dbGetQuery(db.con, "DROP TABLE temp_query");
-		#}
 		
 		#use the TBSL object to determine how to join the tables and create a temporary table
 		if (length(needed.tables) < length(tables(obj)))
 		{
-		    start.node <- get.starting.point(schema(obj), needed.tables)
-		
+		    if (is.null(names(needed.tables)))
+		    {
+			start.node <- get.starting.point(schema(obj), needed.tables)
+		    }else{
+			start.node <- get.starting.point(schema(obj), names(needed.tables))
+		    }
+		    
 		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=T)
 		    
-		    valid.path <- sapply(table.path, function(x) all(needed.tables %in% x))
+		    valid.path <- sapply(table.path, function(x) all(needed.tables %in% x || all(names(needed.tables) %in% x)))
 		    
 		    if (all(valid.path == F))
 		    {
@@ -442,7 +443,12 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    
 		    use.path <- table.path[valid.path][[min.valid.path]]
 		}else{
-		    use.path <- needed.tables   
+		    if (is.null(names(needed.tables)))
+		    {
+			use.path <- needed.tables 
+		    }else{
+			use.path <- names(needed.tables)
+		    }
 		}
 		
 		#the joining needs to take into account not just the direct keys from one table to the next but also the necessary
@@ -480,27 +486,67 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    }
 		})
 		
-		#was:
-		#use.query <- paste(paste("CREATE TABLE temp_query AS SELECT * FROM", use.path[1], paste(paste("JOIN",use.path[-1],"USING (", join.cols,")"), collapse=" ")))
-		#dbGetQuery(db.con, use.query)
-		#dbDisconnect(db.con)
-		
 		#now using dplyr::inner_join(x,y,by=NULL)
 		
 		src.db <- src_sqlite(dbFile(obj), create = F)
 		
-		all.tab <- tbl(src.db, use.path[1])
-		
-		use.path <- use.path[-1]
-		
-		for(i in seq_along(use.path))
+		if (is.null(names(needed.tables)))
 		{
-		    all.tab <- inner_join(all.tab, tbl(src.db,use.path[i]), by=join.cols[[i]])
+		    all.tab <- tbl(src.db, use.path[1])
+		
+		    use.path <- use.path[-1]
+		    
+		    for(i in seq_along(use.path))
+		    {
+			all.tab <- inner_join(all.tab, tbl(src.db,use.path[i]), by=join.cols[[i]])
+		    }
+		}else{
+		    
+		    all.tab <- tbl(src.db, use.path[1])
+		    
+		    if (use.path[1] %in% names(needed.tables))
+		    {
+			all.tab <- eval(parse(text=paste("select(all.tab, ", needed.tables[use.path[1]], ")")))
+			if (all(join.cols[[1]] %in% colnames(all.tab) ==F))
+			{
+			    diff.cols <- setdiff(join.cols[[1]], colnames(all.tab))
+			    all.tab <- eval(parse(text=paste("select(all.tab, ", paste(diff.cols, collapse=",") , needed.tables[use.path[1]], ")")))
+			}
+			
+		    }
+		    
+		    use.path <- use.path[-1]
+		    
+		    for(i in seq_along(use.path))
+		    {
+			temp.tab <- tbl(src.db,use.path[i])
+			
+			if (use.path[i] %in% names(needed.tables))
+			{
+			    temp.tab <- eval(parse(text=paste("select(temp.tab, ", needed.tables[use.path[i]], ")")))
+			    if (all(join.cols[[i]] %in% colnames(temp.tab) ==F))
+			    {
+				diff.cols <- setdiff(join.cols[[i]], colnames(temp.tab))
+				temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , needed.tables[use.path[i]], ")")))
+			    }
+			}
+			
+			all.tab <- inner_join(all.tab, temp.tab, by=join.cols[[i]])
+		    }
 		}
 		
 	    }else{
+		
 		my_db <- src_sqlite(dbFile(obj), create = F)
-		all.tab <- tbl(my_db, needed.tables)
+		
+		if (is.null(names(needed.tables))==F)
+		{
+		    all.tab <- tbl(my_db, names(needed.tables))
+		    all.tab <- eval(parse(text=paste("select(all.tab, ", needed.tables, ")")))
+		    
+		}else{
+		    all.tab <- tbl(my_db, needed.tables)
+		}
 	    }
 	    
 	    return(all.tab)
@@ -618,6 +664,16 @@ select_.Database <- function(.data, .dots)
 	
 	clean.cols <- sapply(use.expr, function(x) deparse(x$expr))
 	
+	if (length(clean.cols) > 1)
+	{
+	    stop(".tables can only be used with at most one select statement, use the dot notation: e.g. 'tableX.columnY'")
+	}else if (length(clean.cols) == 1)
+	{
+	    temp.table <- use.tables
+	    use.tables <- clean.cols
+	    names(use.tables) <- temp.table
+	}
+	
     }else if (length(use.expr) == 0 && is.null(.tables))
     {
 	stop("ERROR: Please either supply desired columns (columns(.data)) or specify valid table(s) in .tables ('tables(.data)')")
@@ -642,6 +698,17 @@ select_.Database <- function(.data, .dots)
 	#where the nulls are non-input tables
 	not.sup.tab <- sapply(inp.tab.list, function(x) all(is.null(x)))
 	
+	clean.cols <- sapply(1:length(use.expr), function(x)
+				 {
+				    if (is.null(inp.tab.list[[x]])==F)
+				    {
+					return(gsub(paste0(inp.tab.list[[x]], "\\."), "", deparse(use.expr[[x]]$expr)))
+				    }else{
+					return(deparse(use.expr[[x]]$expr))
+				    }
+				    
+				 })
+	
 	if(any(not.sup.tab))
 	{
 	    tab.cols <- columns(.data)
@@ -654,10 +721,17 @@ select_.Database <- function(.data, .dots)
 		tab.ord.mat <- matrix(tab.ord.mat, nrow=1, ncol=length(tab.ord.mat), dimnames=list(NULL, names(tab.cols)))
 	    }
 	    
-	    if (all(apply(tab.ord.mat, 1, any)))
+	    if (all(apply(tab.ord.mat, 1, function(x) sum(x) == 1)))
 	    {
-		sel.tabs <- apply(tab.ord.mat, 2, any)
-		use.tables <- colnames(tab.ord.mat)[sel.tabs]
+		sel.tabs <- apply(tab.ord.mat, 2, which)
+		
+		which.to.use <- sapply(sel.tabs, length) > 0
+		
+		unl.tabs <- unlist(sel.tabs[which.to.use])
+		
+		use.tables <- clean.cols[not.sup.tab][unl.tabs]
+		
+		names(use.tables) <- names(unl.tabs)
 		
 	    }else{
 		#otherwise the columns would need to be contiguous between multiple tables
@@ -665,7 +739,16 @@ select_.Database <- function(.data, .dots)
 		
 		not.contig <- apply(tab.ord.mat, 1, any) == F
 		
-		stop(paste("ERROR: Column(s):",paste(sapply(use.expr[not.sup.tab][not.contig], function(x) deparse(x$expr)), collapse=","), "are not contiguous in any table.  Try specifying a table: e.g. 'tableX.columnY'"))
+		if (any(not.contig))
+		{
+		    stop(paste("ERROR: Column(s):",paste(sapply(use.expr[not.sup.tab][not.contig], function(x) deparse(x$expr)), collapse=","), "are not contiguous in any table.  Try specifying a table: e.g. 'tableX.columnY'"))
+		}else{
+		    
+		    multi.tab <- apply(tab.ord.mat, 1, function(x) sum(x) > 1)
+		    
+		    stop(paste("ERROR: Column(s):",paste(sapply(use.expr[not.sup.tab][multi.tab], function(x) deparse(x$expr)), collapse=","), "are found in multiple tables try specifying a table: 'tableX.columnY'"))
+		}
+		
 	    }
 	    
 	    if(any(not.sup.tab==F))
@@ -684,38 +767,21 @@ select_.Database <- function(.data, .dots)
 		    stop(paste("ERROR: Provided column(s):", paste(sapply(use.expr[not.sup.tab==F][valid.cols==F], function(x) deparse(x$expr)), collapse=","), "could not be found in the specified tables"))
 		}
 		
-		use.tables <- append(use.tables, unique(as.character(unlist(inp.tab.list))))
+		new.tab.list <- clean.cols[not.sup.tab==F]
+		names(new.tab.list) <- sapply(inp.tab.list[not.sup.tab==F], "[", 1)
+		
+		use.tables <- append(use.tables, new.tab.list)
 	    }
 	    
 	}else{
-	    use.tables <- unique(as.character(unlist(inp.tab.list)))
+	    use.tables <- clean.cols
+	    names(use.tables) <- sapply(inp.tab.list, "[", 1)
 	}
 	
-	clean.cols <- sapply(1:length(use.expr), function(x)
-				 {
-				    if (is.null(inp.tab.list[[x]])==F)
-				    {
-					return(gsub(paste0(inp.tab.list[[x]], "."), "", deparse(use.expr[[x]]$expr)))
-				    }else{
-					return(deparse(use.expr[[x]]$expr))
-				    }
-				    
-				 })
 	
     }
     
-    #figure out which tables are needed...
-    
-    my_db_tbl <- join(.data, use.tables)
-    
-    if (length(clean.cols) == 0)
-    {
-	use.statement <- "select(my_db_tbl, everything())"
-    }else{
-	use.statement <- paste("select(my_db_tbl,", paste(clean.cols, collapse=","), ")")
-    }
-    
-    return(eval(parse(text=use.statement)))
+    return(join(.data, use.tables))
 }
 
 get.tables.from.vars <- function(col.list)
