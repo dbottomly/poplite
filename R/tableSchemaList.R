@@ -415,8 +415,6 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		stop("ERROR: needed.tables needs to be a character vector corresponding to table names")
 	    }
 	    
-	    browser()
-	    
 	    if (length(needed.tables) > 1)
 	    {
 		
@@ -510,7 +508,8 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 			if (all(join.cols[[1]] %in% colnames(all.tab) ==F))
 			{
 			    diff.cols <- setdiff(join.cols[[1]], colnames(all.tab))
-			    all.tab <- eval(parse(text=paste("select(all.tab, ", paste(diff.cols, collapse=",") , needed.tables[use.path[1]], ")")))
+			    all.tab <- tbl(src.db, use.path[1])
+			    all.tab <- eval(parse(text=paste("select(all.tab, ", paste(diff.cols, collapse=",") , ",",needed.tables[use.path[1]], ")")))
 			}
 			
 		    }
@@ -527,12 +526,16 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 			    if (all(join.cols[[i]] %in% colnames(temp.tab) ==F))
 			    {
 				diff.cols <- setdiff(join.cols[[i]], colnames(temp.tab))
+				temp.tab <- tbl(src.db,use.path[i])
 				temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , needed.tables[use.path[i]], ")")))
 			    }
 			}
 			
 			all.tab <- inner_join(all.tab, temp.tab, by=join.cols[[i]])
 		    }
+		    
+		    #make sure the final table only includes the requested columns
+		    all.tab <- eval(parse(text=paste("select(all.tab, ", paste(needed.tables, collapse=","), ")")))
 		}
 		
 	    }else{
@@ -554,7 +557,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 	  })
 
 #Went with an S3 method here and for select for the S4 Database class to go with the S3 generics in dplyr
-filter_.Database <- function(.data, .dots)
+filter_.Database <- function(.data, ...,.dots)
 	  {
 	    #was this, need to change to below, due to changes to dplyr
 	    #taken from the internal code of dplyr, the dots() function
@@ -596,23 +599,41 @@ filter_.Database <- function(.data, .dots)
 	    {
 		col.to.tab <- stack(columns(.data))
 		
-		np.tabs <- sapply(needed.vars[not.prov.tabs], function(x)
+		np.tabs <- lapply(needed.vars[not.prov.tabs], function(x)
 				  {
 					found.tabs <- as.character(col.to.tab$ind[col.to.tab$values %in% x])
-					if (length(found.tabs) == 1)
-					{
-					    return(found.tabs)
-					}else if(length(found.tabs) == 0)
-					{
-					    stop(paste("ERROR: Cannot find corresponding table for", x))
-					}
-					else
-					{
-					    stop(paste("ERROR: Column", x, "matches multiple tables try specifying it as 'table.column'"))
-					}
 				  })
-	    
-		needed.tables <- unique(c(np.tabs, unlist(parse.tables[not.prov.tabs == F])))
+		
+		np.tabs <- append(np.tabs, parse.tables[not.prov.tabs == F])
+		
+		np.tab.len <- sapply(np.tabs, length)
+		
+		if(any(np.tab.len == 0))
+		{
+		    stop(paste("ERROR: Cannot find corresponding table for", paste(needed.vars[np.tab.len == 0],collapse=",")))
+		}
+		else if (any(np.tab.len > 1))
+		{
+		    #if all other columns match one specific table, and the multi-mapping col does too, then use that table
+		    ##otherwise throw an error
+		    
+		    unique.tabs <- np.tabs[np.tab.len == 1]
+		    
+		    conc.tab.list <- lapply(np.tabs[np.tab.len > 1], function(x) x[x %in% unlist(unique.tabs)])
+		    conc.list.len <- sapply(conc.tab.list, length)
+		    
+		    if (all(length(conc.list.len) == 1) && length(unique(unlist(unique.tabs))) == 1)
+		    {
+			#as everybody agrees on a given table
+			np.tabs <- unique.tabs[1]
+			
+		    }else{
+			stop("ERROR: Cannot uniquely map columns to table, try using: tableX.columnY")
+		    }
+		    
+		}
+		
+		needed.tables <- unique(unlist(np.tabs))
 		
 	    }else{
 		#names are provided for all columns
@@ -634,21 +655,32 @@ filter_.Database <- function(.data, .dots)
 	    
 	    return(eval(parse(text=use.statement)))
     }
+
+select <- function(.data,..., .tables=NULL)
+{   
+    use.dots <- lazy_dots(...)
     
-select_.Database <- function(.data, .dots)
+    if ((missing(.tables) || is.null(.tables) || is.na(.tables))==F && class(.data) == "Database")
+    {
+	use.dots <- append(use.dots, list(.tables=.tables))
+    }
+    
+    select_(.data, .dots = use.dots)
+}
+
+select_.Database <- function(.data, ..., .dots)
 {
     #check to see if .tables is part of .dots
     
     if('.tables' %in% names(.dots))
     {
-	.tables <- lazy_eval(.dots$.tables)
+	.tables <- .dots$.tables
+	#.tables <- lazy_eval(.dots$.tables)
 	.dots <- .dots[-which(names(.dots) == ".tables")]
     }else{
 	.tables <- NULL
     }
     
-    #taken from the internal code of dplyr, the dots() function
-    #use.expr <- eval(substitute(alist(...)))
     use.expr <- .dots
     
     if (is.null(.tables) == F)
@@ -714,7 +746,17 @@ select_.Database <- function(.data, .dots)
 	    tab.cols <- columns(.data)
 	    
 	    #if no tables are specified, need to first try to find a table which contains all the columns
-	    tab.ord.mat <- sapply(tab.cols, function(x) sapply(use.col.list[not.sup.tab], function(y) all(rank(match(y, x), na.last=NA) == seq_along(y))))
+	    tab.ord.mat <- sapply(tab.cols, function(x) sapply(use.col.list[not.sup.tab], function(y) {
+		
+		temp.match.rank <- rank(match(y, x), na.last=NA)
+		
+		if (length(temp.match.rank) > 0 && all(temp.match.rank == seq_along(y)))
+		{
+		    return(T)
+		}else{
+		    return(F)
+		}
+	    }))
 	    
 	    if (is.matrix(tab.ord.mat) == F)
 	    {
@@ -756,10 +798,26 @@ select_.Database <- function(.data, .dots)
 		#a mix of specified and non-specified
 		##so add in the additional tables, if the columns exist...
 		
-		valid.cols <- mapply(function(cols, tabs)
+		if (any(sapply(inp.tab.list[not.sup.tab==F], length) != 1))
+		{
+		    stop("ERROR: Only a single table should be specified per statement.")
+		}
+		
+		use.tabs <- sapply(inp.tab.list[not.sup.tab==F], "[", 1)
+		
+		valid.cols <- mapply(function(cols, tabs, cur.tab)
 		       {
-			    return(all(rank(match(cols, tabs), na.last=NA) == seq_along(y)))
-		       }, use.col.list[not.sup.tab==F], tab.cols[inp.tab.list[not.sup.tab==F]])
+			    strip.cols <- gsub(paste0(cur.tab, "\\."), "", cols)
+			    
+			    temp.match.rank <- rank(match(strip.cols, tabs), na.last=NA)
+		
+			    if (length(temp.match.rank) > 0 && all(temp.match.rank == seq_along(cols)))
+			    {
+				return(T)
+			    }else{
+				return(F)
+			    }
+		       }, use.col.list[not.sup.tab==F], tab.cols[use.tabs], cur.tab=use.tabs)
 		
 		
 		if (all(valid.cols) == F)
@@ -768,7 +826,7 @@ select_.Database <- function(.data, .dots)
 		}
 		
 		new.tab.list <- clean.cols[not.sup.tab==F]
-		names(new.tab.list) <- sapply(inp.tab.list[not.sup.tab==F], "[", 1)
+		names(new.tab.list) <- use.tabs
 		
 		use.tables <- append(use.tables, new.tab.list)
 	    }
@@ -813,7 +871,7 @@ setMethod("populate", signature("Database"), function(obj, ins.vals=NULL, use.ta
 	    
 	    .populate(schema(obj), db.con, ins.vals=ins.vals, use.tables=use.tables, should.debug=should.debug)
 	    
-	    dbDisconnect(db.con)
+	    invisible(dbDisconnect(db.con))
 	  })
 
 .populate <- function(obj, db.con,ins.vals=NULL, use.tables=NULL, should.debug=FALSE)

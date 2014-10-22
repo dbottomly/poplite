@@ -2,14 +2,20 @@ import(methods)
 import(RSQLite)
 import(dplyr)
 import(RSQLite.extfuns)
-importFrom(lazyeval, lazy_eval)
+importFrom(lazyeval, lazy_eval, lazy_dots, lazy)
 importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V)
 #methods
 export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, append, length, 'relationship<-', schema, dbFile,
-tables, columns, SangerVarMask)
+tables, columns)
+
+S3method(filter_, Database)
+S3method(select_, Database)
 
 #other functions
-export(correct.df.names, Database, filter_.Database, select_.Database)
+export(correct.df.names, Database, filter, select)
+
+#select_.Database
+#filter_.Database
 
 #searchCols, searchDict, searchTables,
 exportClass(TableSchemaList, Database)

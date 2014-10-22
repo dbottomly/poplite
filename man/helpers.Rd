@@ -42,8 +42,18 @@ Daniel Bottomly
 	\code{\linkS4class{TableSchemaList}}
 }
 \examples{
-	print ('hello')
-}
-% Add one or more standard keywords, see file 'KEYWORDS' in the
-% R documentation directory.
+  if (require(Lahman))
+  { 
+    franches <- makeSchemaFromData(TeamsFranchises, name="team_franch")
+    show(franches)
+    
+    test.df <- TeamsFranchises
+    names(test.df)[1] <- "franch.ID"
+    
+    names(test.df)
+    
+    names(correct.df.names(test.df))
+  }
+  }
+
 \keyword{ utilities}

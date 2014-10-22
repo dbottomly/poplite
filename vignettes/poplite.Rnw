@@ -1,0 +1,42 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1.0in]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[parfill]{parskip}
+\SweaveOpts{keep.source=TRUE} 
+
+\title{poplite Vignette}
+\author{Daniel Bottomly}
+%\VignetteIndexEntry{poplite}
+\begin{document}
+
+\maketitle
+
+\section{The poplite package}
+
+The \texttt{poplite} package....
+
+\section{Basic Usage}
+
+Sample tracking example...
+
+<<eval=FALSE, echo=TRUE>>=
+
+
+@
+
+
+\begin{center}
+
+<<fig=TRUE, echo=TRUE>>=
+
+plot(1:10,1:10)
+
+@
+
+\end{center}
+
+<<eval=TRUE>>=
+sessionInfo()
+@
+
+\end{document}

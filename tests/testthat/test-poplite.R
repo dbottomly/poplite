@@ -528,6 +528,9 @@ test_that("Querying with Database objects",
     #onto querying Database objects
     #sample.tracking.db
     
+    #\method{filter_}{Database}(.data, \dots, .dots)
+    #\method{select_}{Database}(.data, \dots, .dots)
+    
     test.con <- dbConnect(SQLite(), dbFile(sample.tracking.db))
     
     #start with some basic select queries
@@ -612,6 +615,14 @@ test_that("Querying with Database objects",
     #this doesn't work currently
     nu.res <- as.data.frame(select(sample.tracking.db, samples.sample_id:dna_ind, sample_id:status))
     
+    expect_true(all(names(nu.res) %in% use.cols))
+    expect_equal(nu.res[,use.cols], two.tab.cols[,use.cols])
+    
+    #bug that came up when preparing the examples
+    
+    bug.1 <- select(baseball.db, yearID:WCWin, franchName)
+    expect_true(all(colnames(bug.1) %in% c("franchName", columns(baseball.db)$teams[which(columns(baseball.db)$teams == "yearID"):which(columns(baseball.db)$teams == "WCWin")])))
+    
     #onto filtering
     
     #this shouldn't work as the sample_id column is ambigous
@@ -624,11 +635,37 @@ test_that("Querying with Database objects",
     
     expect_equal(samp.1.df, db.samps[db.samps$sample_id == 1,])
     
-    ##now add the same support for the table.column syntax to filter
-    #filter(sang.db, align_status == "UniqueMapped")
-    #filter(sang.db, probe_info.align_status == "UniqueMapped")
-    #filter(sang.db, kitten == 5 | (probe_info.align_status == "UniqueMapped" & probe_id == 179377))
+    #also should work like when unambigous:
     
+    status.res <- filter(sample.tracking.db, status == 1)
+    
+    expect_equal(as.data.frame(status.res), db.tab.list$clinical[db.tab.list$clinical$status == 1,], check.attributes=F)
+    
+    #multiple filters are not defined
+    
+    expect_error(filter(sample.tracking.db, status == 1, sample_id==3))
+    
+    #though you can do:
+    ##as long as the columns are uniquely defined
+    clin.filt.res <- filter(sample.tracking.db, status == 1 & sample_id==3)
+    
+    expect_equal(as.data.frame(clin.filt.res), db.tab.list$clinical[with(db.tab.list$clinical, status == 1 & sample_id == 3),], check.attributes=F)
+    
+    #similar to also specifying columns
+    
+    clin.filt.res.1 <- filter(sample.tracking.db, clinical.status == 1 & clinical.sample_id==3)
+    
+    expect_equal(as.data.frame(clin.filt.res), as.data.frame(clin.filt.res.1))
+    
+    #again, partially specifying columns
+    
+    clin.filt.res.2 <- filter(sample.tracking.db, clinical.status == 1 & sample_id==3)
+    
+    expect_equal(as.data.frame(clin.filt.res), as.data.frame(clin.filt.res.2))
+    
+    #undefined columns should break
+    
+    expect_error(filter(sample.tracking.db, kitten == 1 & sample_id==3))
     
 })
 

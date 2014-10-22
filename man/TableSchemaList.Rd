@@ -21,7 +21,8 @@
 
 \title{Class \code{"TableSchemaList"}}
 \description{
-A list-based representation of a SQLite database which provides a simple approach to loading data into a database as well as merging with the existing data.
+A list-based representation of a SQLite database which provides a simple approach to loading data into a database as well as merging with the existing data.  See the vignette for more
+complex examples.
 }
 \section{Objects from the Class}{
 Objects can be created by calls of the form \code{new("TableSchemaList", tab.list, search.cols)}.
@@ -57,15 +58,32 @@ Daniel Bottomly
 }
 
 \examples{
-tbsl <- SangerVarMask()
 
-createTable(tbsl, table.name="reference", mode="normal")
-createTable(tbsl, table.name="reference", mode="merge")
-
-insertStatement(tbsl, table.name="reference", mode="normal")
-insertStatement(tbsl, table.name="reference", mode="merge")
-
-mergeStatement(tbsl, table.name="reference")
+if (require(Lahman))
+{
+  baseball.teams <- new("TableSchemaList")
+  
+  franches <- makeSchemaFromData(TeamsFranchises, name="team_franch")
+  
+  baseball.teams <- append(baseball.teams, franches)
+  
+  teams <- makeSchemaFromData(Teams, name="teams")
+   
+  baseball.teams <- append(baseball.teams, teams)
+    
+  salaries <- makeSchemaFromData(Salaries, name="salaries")
+  
+  baseball.teams <- append(baseball.teams, salaries)
+    
+  relationship(baseball.teams, from="team_franch", to="teams") <- franchID ~ franchID
+    
+  relationship(baseball.teams, from="teams", to="salaries") <- teamID ~ teamID
+ 
+  tables(baseball.teams)
+  
+  columns(baseball.teams)
+  
+}
 
 }
 \keyword{classes}

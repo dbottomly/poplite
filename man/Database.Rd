@@ -43,6 +43,32 @@ Daniel Bottomly
 	\code{\linkS4class{TableSchemaList}}
 }
 \examples{
-showClass("Database")
+
+if (require(Lahman))
+{
+ baseball.teams <- makeSchemaFromData(TeamsFranchises, name="team_franch")
+ baseball.teams <- append(baseball.teams, makeSchemaFromData(Teams, name="teams"))
+ 
+ relationship(baseball.teams, from="team_franch", to="teams") <- franchID ~ franchID
+ 
+ baseball.db <- Database(baseball.teams, tempfile())
+ 
+ tables(baseball.db)
+ columns(baseball.db)
+ schema(baseball.db)
+ 
+ populate(baseball.db, list(teams=Teams, team_franch=TeamsFranchises))
+ 
+ examp.con <- dbConnect(SQLite(), dbFile(baseball.db))
+ 
+ dbListTables(examp.con)
+ 
+ head(dbReadTable(examp.con, "teams"))
+ head(dbReadTable(examp.con, "team_franch"))
+ 
+ dbDisconnect(examp.con)
+ 
+}
+
 }
 \keyword{classes}
