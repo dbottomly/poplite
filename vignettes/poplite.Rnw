@@ -43,7 +43,7 @@ head(clinical)
 
 @
 
-The samples \texttt{data.frame} records whether a given patient, keyed by sample_id was observed in one of several 'waves' and whether they contributed a DNA sample.
+The samples \texttt{data.frame} records whether a given patient, keyed by sample\_id was observed in one of several 'waves' and whether they contributed a DNA sample.
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -72,7 +72,7 @@ try(dna.tbsl <- makeSchemaFromData(dna, "dna"))
 @
 
 The error caused by attempting to create a schema object from dna, is due to the formatting of the column name of 'ng.ul' which is a valid R name, but not a valid SQLite name.  A convienient way to
-fix this is to use the \texttt{correct.df.names} function as below.
+fix this is to use the \texttt{correct.df.names} function as below.  Note that this modified \texttt{data.frame} will be the one that has to be provided to the \texttt{populate} method.
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -91,7 +91,7 @@ At this point, the database can be created and populated using the schema define
 who wants to query across the tables be able to determine the relationships between the tables.  In some cases this can be determined by column names alone, in other cases it may not be so clear.  The \texttt{poplite}
 package allows the specification of relationships between tables using the R formula syntax.  This functionality is probably best illustrated by example.
 
-The 'clinical' table is the starting point of this database as both the 'samples' and 'dna' tables refer back to its.  In the case of both the 'dna' and 'samples' tables, the 'clinical' table can be refered to using the 'sample_id' column.
+The 'clinical' table is the starting point of this database as both the 'samples' and 'dna' tables refer back to its.  In the case of both the 'dna' and 'samples' tables, the 'clinical' table can be refered to using the 'sample\_id' column.
 This type of relationship can be created by the following:
 
 <<eval=TRUE, echo=TRUE>>=
@@ -101,8 +101,8 @@ relationship(sample.tracking, from="clinical", to="dna") <-sample_id~sample_id
 relationship(sample.tracking, from="clinical", to="samples") <- sample_id~sample_id
 @
 
-In addition, the 'dna' table can be referred to by the 'samples' table using a combination of 'sample_id' and 'wave'.  Instead of directly cross referencing these columns as we did for 'sample_id', we specify that we want to use the 'primary key'
-of 'dna'.  This is a column of integer values that uniquely identifies each row, it was added automatically by \texttt{makeSchemaFromData} by default.  We specify this in the following manner:
+In addition, the 'dna' table can be referred to by the 'samples' table using a combination of 'sample\_id' and 'wave'.  Instead of directly cross referencing these columns as we did for 'sample\_id', we specify that we want to use the 'primary key'
+of 'dna'.  Where the primary key is a column of integer values that uniquely identifies each row and by default it was added automatically by \texttt{makeSchemaFromData}.  We specify this in the following manner:
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -110,7 +110,7 @@ relationship(sample.tracking, from="dna", to="samples") <- .~sample_id+wave
 
 @
 
-Where '.' indicates that the primary key for the table should be used.  Now that our schema is complete, we are now ready to populate our database.  First, we create a \texttt{Database} object which simply contains both the schema as well as
+Where '.' is a shortcut that indicates that the primary key for the table should be used.  Now that our schema is complete, we are now ready to populate our database.  First, we create a \texttt{Database} object which simply contains both the schema as well as
 the file path to where the database resides.  We then call the \texttt{populate} method and provide it a named list containing our \texttt{data.frames}.  The database is now ready to be queried!
 
 <<eval=TRUE, echo=TRUE>>=
@@ -120,8 +120,82 @@ populate(sample.tracking.db, list(dna=new.dna, samples=samples, clinical=clinica
 
 @
 
-As mentioned in the introduction, the query interface utilizes the approach of the \texttt{dplyr} package, whereby several verbs are used to perform common queries.  In addition to utilizing the single table verbs defined in \texttt{dplyr}, \texttt{poplite}
-defines multi-table versions of the \texttt{filter} and \texttt{select} verbs.
+As mentioned in the introduction, the query interface utilizes the approach of the \texttt{dplyr} package, whereby a small set of verbs are used to perform common queries.  In addition to utilizing the single table verbs defined in \texttt{dplyr}, \texttt{poplite}
+defines multi-table versions of the \texttt{select} and \texttt{filter} verbs.  The \texttt{select} verb allows the user to select columns from a table-like object, in this case an SQLite database. As the \texttt{poplite} version of \texttt{select} and \texttt{filter} can be used for any of the
+tables in the defined schema, the most important requirement is for the user to make sure the column(s) are unambigous in terms of the tables.  This can be done in several ways:
+
+(1) Only for the \texttt{select} statement, the \texttt{.tables} argument allows selecting all or part of the columns of a given table(s).  If multiple tables are provided, then they are first joined (an 'inner join' in SQL terminology) using the specified relationships in the schema.  This provides a convienent
+way to retrieve a combined version of the data in the database.
+
+<<eval=TRUE, echo=TRUE>>=
+
+select(sample.tracking.db, .tables="dna")
+
+select(sample.tracking.db, sample_id:lab_id, .tables="dna")
+
+select(sample.tracking.db, .tables=c("clinical","dna"))
+
+@
+
+(2) If a column or set of columns uniquely identifies a table, then no further information is needed to execute the query.
+
+<<eval=TRUE, echo=TRUE>>=
+
+select(sample.tracking.db, sample_id:lab_id)
+
+filter(sample.tracking.db, sex == "M" & var_wave_1 > 0)
+
+filter(sample.tracking.db, sample_id == 97 & var_wave_1 > 0)
+
+try(filter(sample.tracking.db, sample_id == 97))
+
+@
+
+(3) A table can be specified in the query using a '.' similar to how it is done in SQL, i.e. tableX.ColumnY.  This only should be done once per statement for \texttt{select} statments, but per variable for filter statements as is shown below.
+This restriction reflects how the queries are carried out.  Each grouping of statements statements are applied to the specified or inferred table prior to joining.  Note that for the \texttt{poplite} \texttt{filter} verb cross-table 'OR' statements are currently not
+supported.
+
+<<eval=TRUE, echo=TRUE>>=
+
+
+select(sample.tracking.db, dna.sample_id)
+
+select(sample.tracking.db, dna.sample_id:lab_id)
+
+filter(sample.tracking.db, clinical.sample_id == 97)
+
+filter(sample.tracking.db, clinical.status == 1 & dna.wave==2)
+
+@
+
+The \texttt{poplite} query interface is opt-in meaning that more complex queries can always be carried out directly using the methodology provided in the \texttt{dplyr} package or plain SQL statements after first connecting to the database file using RSQLite.
+Below are three approaches of performing the same query:
+
+<<eval=TRUE, echo=TRUE>>=
+
+#poplite + dplyr
+wave.1.samp.pop <- filter(select(sample.tracking.db, .tables=c("samples", "dna")), wave == 1)
+
+#dplyr
+src.db <- src_sqlite(dbFile(sample.tracking.db), create = F)
+samp.tab <- tbl(src.db, "samples")
+dna.tab <- tbl(src.db, "dna")
+wave.1.samp.dplyr <- inner_join(samp.tab, filter(dna.tab, wave == 1), by=c("dna_ind", "sample_id"))
+
+#RSQLite
+samp.db <- dbConnect(SQLite(), dbFile(sample.tracking.db))
+wave.1.samp.sql <- dbGetQuery(samp.db, 'SELECT * FROM samples JOIN dna USING (dna_ind, sample_id) WHERE wave == 1')
+dbDisconnect(samp.db)
+
+all.equal(as.data.frame(wave.1.samp.pop), wave.1.samp.sql)
+
+all.equal(as.data.frame(wave.1.samp.dplyr), wave.1.samp.sql)
+
+@
+
+\section{Advanced Usage}
+
+Featuring VCF parsing from the VariantAnnotation package
 
 \begin{center}
 
@@ -133,9 +207,9 @@ plot(1:10,1:10)
 
 \end{center}
 
-\section{Advanced Usage}
 
-Featuring VCF parsing from the VariantAnnotation package
+
+
 
 <<eval=TRUE>>=
 sessionInfo()

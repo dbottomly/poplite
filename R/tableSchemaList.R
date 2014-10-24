@@ -430,7 +430,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    
 		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=T)
 		    
-		    valid.path <- sapply(table.path, function(x) all(needed.tables %in% x || all(names(needed.tables) %in% x)))
+		    valid.path <- sapply(table.path, function(x) all(needed.tables %in% x) || (is.null(names(needed.tables)) == F && all(names(needed.tables) %in% x)))
 		    
 		    if (all(valid.path == F))
 		    {
@@ -450,20 +450,39 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		}
 		
 		#the joining needs to take into account not just the direct keys from one table to the next but also the necessary
-		#keys if one table has already been merged to another...
+		#keys if one table has already been merged to another as well as any keys that are shared between the tables that
+		#were derived from a downstream table
 		join.cols <- lapply(1:(length(use.path)-1), function(x) {
 		    
-		    if (x > 1)
+		    #probably don't need this code, as the below addition should address this issue and then some
+		    #take into account all the previous keys used prior to x if applicable
+		#    if (x > 1)
+		#    {
+		#	next.path.keys <- foreignLocalKeyCols(schema(obj), use.path[x+1], use.path[1:(x-1)])
+		#	if (length(next.path.keys) > 0)
+		#	{
+		#	    add.keys <- unlist(next.path.keys)
+		#	}
+		#    }else{
+		#	add.keys <- NULL
+		#    }
+		    
+		    #if x and x + 1 share keys with another table(s)
+		    
+		    x.keys <- foreignLocalKeyCols(schema(obj), use.path[x])
+		    xp1.keys <- foreignLocalKeyCols(schema(obj), use.path[x+1])
+		    
+		    common.key.tables <- intersect(names(x.keys), names(xp1.keys))
+		    
+		    if (length(common.key.tables) > 0)
 		    {
-			next.path.keys <- foreignLocalKeyCols(schema(obj), use.path[x+1], use.path[1:(x-1)])
-			if (length(next.path.keys) > 0)
-			{
-			    add.keys <- unlist(next.path.keys)
-			}
+			add.keys <- unlist(mapply(function(x,y) intersect(x,y), x.keys[common.key.tables], xp1.keys[common.key.tables]))
+			
 		    }else{
 			add.keys <- NULL
 		    }
 		    
+		    #finally the direct keys from one table to the next
 		    for.join <- foreignLocalKeyCols(schema(obj), use.path[x], use.path[x+1])
 		    if (is.null(for.join))
 		    {
@@ -475,12 +494,13 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 			}
 			else
 			{
-			    return(append(back.join, add.keys))
+			    #the as.character has to do with inner_join and company have different semantics based on named versus unnamed
+			    return(as.character(append(back.join, add.keys)))
 			}
 		    }
 		    else
 		    {
-			return(append(for.join, add.keys))
+			return(as.character(append(for.join, add.keys)))
 		    }
 		})
 		
@@ -498,6 +518,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    {
 			all.tab <- inner_join(all.tab, tbl(src.db,use.path[i]), by=join.cols[[i]])
 		    }
+		    
 		}else{
 		    
 		    all.tab <- tbl(src.db, use.path[1])
@@ -559,9 +580,6 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 #Went with an S3 method here and for select for the S4 Database class to go with the S3 generics in dplyr
 filter_.Database <- function(.data, ...,.dots)
 	  {
-	    #was this, need to change to below, due to changes to dplyr
-	    #taken from the internal code of dplyr, the dots() function
-	    #use.expr <- eval(substitute(alist(...)))
 	    
 	    use.expr <- .dots
 	    

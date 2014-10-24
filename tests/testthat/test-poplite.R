@@ -528,9 +528,6 @@ test_that("Querying with Database objects",
     #onto querying Database objects
     #sample.tracking.db
     
-    #\method{filter_}{Database}(.data, \dots, .dots)
-    #\method{select_}{Database}(.data, \dots, .dots)
-    
     test.con <- dbConnect(SQLite(), dbFile(sample.tracking.db))
     
     #start with some basic select queries
@@ -566,6 +563,20 @@ test_that("Querying with Database objects",
     merge.dta <- merge.dta[do.call("order", merge.dta),]
     
     expect_equal(atj.dta, merge.dta, check.attributes=F)
+    
+    #specifying a subset of the tables
+    
+    sub.tab.join <- select(sample.tracking.db, .tables=c("samples", "dna"))
+    
+    merge.dta <- merge(db.tab.list[["samples"]], db.tab.list[["dna"]])
+    
+    stj.dta <- convert.factors.to.strings(as.data.frame(sub.tab.join)[,names(merge.dta)])
+    stj.dta <- stj.dta[do.call("order", stj.dta),]
+    
+    merge.dta <- convert.factors.to.strings(merge.dta)
+    merge.dta <- merge.dta[do.call("order", merge.dta),]
+    
+    expect_equal(stj.dta, merge.dta, check.attributes=F)
     
     #specifying table, couple of columns
     sub.samps <- select(sample.tracking.db, sample_id:dna_ind,.tables="samples")
@@ -667,5 +678,11 @@ test_that("Querying with Database objects",
     
     expect_error(filter(sample.tracking.db, kitten == 1 & sample_id==3))
     
+    #for filter, cross table queries should result in an outer join
+    
+    #not currently supported, but in the future...
+    #filter(sample.tracking.db, clinical.status == 1 | dna.wave==2)
+   
+    #filter(sample.tracking.db, clinical.(status == 1 & sex == "m") | dna.wave==2)
 })
 
