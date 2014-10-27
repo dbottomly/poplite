@@ -111,12 +111,12 @@ relationship(sample.tracking, from="dna", to="samples") <- .~sample_id+wave
 @
 
 Where '.' is a shortcut that indicates that the primary key for the table should be used.  Now that our schema is complete, we are now ready to populate our database.  First, we create a \texttt{Database} object which simply contains both the schema as well as
-the file path to where the database resides.  We then call the \texttt{populate} method and provide it a named list containing our \texttt{data.frames}.  The database is now ready to be queried!
+the file path to where the database resides.  We then call the \texttt{populate} method and provide it with our named \texttt{data.frames}.  The database is now ready to be queried!
 
 <<eval=TRUE, echo=TRUE>>=
 
 sample.tracking.db <- Database(sample.tracking, tempfile())
-populate(sample.tracking.db, list(dna=new.dna, samples=samples, clinical=clinical))
+populate(sample.tracking.db, dna=new.dna, samples=samples, clinical=clinical)
 
 @
 
@@ -194,8 +194,59 @@ all.equal(as.data.frame(wave.1.samp.dplyr), wave.1.samp.sql)
 @
 
 \section{Advanced Usage}
+One of the the most useful features of \texttt{poplite} is that databases can be created from any R object that can be coerced to a \texttt{data.frame} and they can be populated iteratively.  Our example here involves the parsing and loading of a
+variant call format (VCF) file (REFERENCE).  This type of file was devised to encode DNA variations from a reference genome for a given set of samples.  In addition, it can also provide numerical summaries on the confidence that the variant exists
+as well as other summary stats and annotations.  For more details, see the following specifications:(REFERENCE). As parsing is already provided by the \texttt{VariantAnnotation} package in Bioconductor (REFERNCE), we will focus on the population of a database
+using this data.  We will use the example dataset from the \texttt{VariantAnnotation} package and read it into memory as a \texttt{VCF} object as shown in the vignette.
 
-Featuring VCF parsing from the VariantAnnotation package
+<<eval=TRUE, echo=FALSE>>=
+
+library(VariantAnnotation)
+fl <- system.file("extdata", "chr22.vcf.gz", package="VariantAnnotation")
+vcf <- readVcf(fl, "hg19")
+@
+
+The first table we will create is a representation of the chromosome, location and reference positions where at least one variant was observed.  To do this we will create a function that takes a \texttt{VCF} object as input and returns a \texttt{data.frame}.
+This function and a subset of the \texttt{VCF} object is passed to the \texttt{makeSchemaFromFunction} helper function.  What this helper function does is to execute the desired function on a subset of the \texttt{VCF} object, determine the table structure
+from the returned \texttt{data.frame} and package the results in a \texttt{TableSchemaList} object.  It is important that the name(s) for the input objects match between the provided function, \texttt{makeSchemaFromFunction} and ultimately \texttt{populate}.
+
+<<eval=TRUE, echo=TRUE>>=
+
+populate.ref.table <- function(vcf.obj)
+{
+    vcf.rows <- rowData(vcf.obj)
+    ref.dta <- cbind(seqnames=as.character(seqnames(vcf.rows)), as.data.frame(ranges(vcf.rows))[,c("start", "end")], REF=as.character(mcols(vcf.rows)$REF), stringsAsFactors=FALSE)
+    return(ref.dta)
+}
+
+vcf.sc <- makeSchemaFromFunction(populate.ref.table, "reference", vcf.obj=vcf[1:5])
+
+@
+
+Each variant position in our 'reference' table can have multiple alternatives (termed alleles) which were determined by the program generating the VCF file.  The 'alleles' table can be formed as follows:
+
+<<eval=TRUE, echo=TRUE>>=
+
+populate.allele.table <- function(vcf.obj)
+{
+    ref.dta <- populate.ref.table(vcf.obj)
+    
+    vcf.rows <- rowData(vcf.obj)
+    
+    num.alleles <- elementLengths(mcols(vcf.rows)$ALT)
+    
+    split.inds <- lapply(1:length(vcf.rows), function(x) rep(x, num.alleles[x]))
+        
+    allele.dta <- cbind(ref.dta[unlist(split.inds),], ALT=as.character(unlist(mcols(vcf.rows)$ALT)))
+        
+    return(allele.dta)
+}
+
+allele.sc <- makeSchemaFromFunction(populate.allele.table, "alleles", vcf.obj=vcf[1:5])
+
+vcf.sc <- poplite::append(vcf.sc, allele.sc)
+
+@
 
 \begin{center}
 

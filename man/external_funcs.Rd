@@ -50,7 +50,7 @@ Daniel Bottomly
       
       baseball.db <- Database(baseball.teams, tempfile())
       
-      populate(baseball.db, list(teams=Teams, team_franch=TeamsFranchises))
+      populate(baseball.db, teams=Teams, team_franch=TeamsFranchises)
       
       select(baseball.db, .tables="teams")
       

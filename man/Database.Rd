@@ -31,7 +31,7 @@ Objects can be created by calls of the form \code{Database(tbsl, db.file)}.
   \describe{
     \item{columns}{\code{signature(obj = "Database")}: Returns a list of the database table columns indexed by table name}
     \item{dbFile}{\code{signature(obj = "Database")}: Returns the file path associated with the database}
-    \item{populate}{\code{signature(obj = "Database")}, ins.vals, use.tables = NULL, should.debug = FALSE: Populate an SQLite database using the schema and location from the \code{Database} object and the data in the \code{ins.vals} list to be inserted as specified in the  \code{dta.func} element of the \code{TableSchemaList}.  The \code{use.tables} argument can be used to limit the tables populated.  The \code{should.debug} argument outputs more verbose messages regarding the SQL queries.}
+    \item{populate}{\code{signature(obj = "Database")}, \dots, use.tables = NULL, should.debug = FALSE: Populate an SQLite database using the schema and location from the \code{Database} object and the data to be inserted as specified in the  \code{dta.func} element of the \code{TableSchemaList}.  The \code{use.tables} argument can be used to limit the tables populated.  The \code{should.debug} argument outputs more verbose messages regarding the SQL queries.}
     \item{schema}{\code{signature(obj = "Database")}: Returns the associated \code{TableSchemaList} object}
     \item{tables}{\code{signature(obj = "Database")}: Returns a character vector containing the table names}
 	 }
@@ -57,7 +57,7 @@ if (require(Lahman))
  columns(baseball.db)
  schema(baseball.db)
  
- populate(baseball.db, list(teams=Teams, team_franch=TeamsFranchises))
+ populate(baseball.db, teams=Teams, team_franch=TeamsFranchises)
  
  examp.con <- dbConnect(SQLite(), dbFile(baseball.db))
  

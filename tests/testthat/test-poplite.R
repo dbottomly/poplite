@@ -423,7 +423,7 @@ test_that("Database population",{
     
     #populate the entire database
     
-    populate(baseball.db, ins.vals)
+    do.call(populate, append(list(baseball.db), ins.vals))
     
     #read back in each of the tables and make sure they are consistent with in memory data.frames
     
@@ -463,7 +463,7 @@ test_that("Database population",{
     #from above, this correction had to be done
     samp.list$dna <- correct.df.names(samp.list$dna)
     
-    populate(sample.tracking.db, samp.list)
+    do.call(populate, append(list(sample.tracking.db), samp.list))
     
     #again read in the db tables
     

@@ -6,6 +6,6 @@ Author: Daniel Bottomly
 Maintainer: Daniel Bottomly <bottomly@ohsu.edu>
 Depends: R (>= 3.1), RSQLite, methods, dplyr (>= 0.3.0.2), RSQLite.extfuns
 Imports: igraph, lazyeval
-Suggests: testthat, Lahman
+Suggests: testthat, Lahman, VariantAnnotation
 Description: Provides objects and accompanying methods which facilitates populating and querying SQLite databases.    
 License: GPL-3

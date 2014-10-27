@@ -180,7 +180,7 @@ setMethod("show", signature("TableSchemaList"), function(object)
           })
 
 #may need to use BiocGenerics at some point...
-#setGeneric("append", def=function(x, values, after) standardGeneric("append"))
+setGeneric("append")
 setMethod("append", signature("TableSchemaList", "TableSchemaList"), function(x, values, after=length(x))
 	  {
 		 lengx <- length(x)
@@ -210,7 +210,24 @@ setMethod("subset", signature("TableSchemaList"), function(x, table.name)
             return(new("TableSchemaList", tab.list=x@tab.list[table.name]))
           })
 
-makeSchemaFromData <- function(tab.df, name=NULL, primary.cols=NULL)
+makeSchemaFromFunction <- function(dta.func,name,...)
+{
+    if (missing(dta.func) || is.null(dta.func) || is.function(dta.func) == F)
+    {
+	stop("ERROR: Please supply a function for 'func'")
+    }
+    
+    pass.objs <- list(...)
+    
+    if (length(pass.objs) == 0)
+    {
+	stop("ERROR: Please supply object(s) to apply 'func' to")
+    }
+    
+    makeSchemaFromData(do.call(dta.func, pass.objs), name=name, dta.func=dta.func)
+}
+
+makeSchemaFromData <- function(tab.df, name=NULL, primary.cols=NULL, dta.func=NULL)
 {
   if (missing(name) || is.null(name) || is.na(name))
   {
@@ -232,7 +249,14 @@ makeSchemaFromData <- function(tab.df, name=NULL, primary.cols=NULL)
       stop("ERROR: The names of the supplied data.frame need to be modified for the database see correct.df.names")
   }
   
-  cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func= eval(parse(text=paste0("function(x) x[['",name,"']]"))), should.ignore=T, foreign.keys=NULL)
+  if (missing(dta.func) || is.null(dta.func))
+    {
+	use.func <- eval(parse(text=paste0("function(x) x[['",name,"']]")))
+    }else{
+	use.func <- dta.func
+    }
+  
+  cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func=use.func , should.ignore=T, foreign.keys=NULL)
   
   if (missing(primary.cols) || is.null(primary.cols) || is.na(primary.cols))
   {
@@ -883,11 +907,11 @@ get.tables.from.vars <- function(col.list)
 }
 
 setGeneric("populate", def=function(obj, ...) standardGeneric("populate"))
-setMethod("populate", signature("Database"), function(obj, ins.vals=NULL, use.tables=NULL, should.debug=FALSE)
+setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL, should.debug=FALSE)
 	  {
 	    db.con <- dbConnect(SQLite(), dbFile(obj))
 	    
-	    .populate(schema(obj), db.con, ins.vals=ins.vals, use.tables=use.tables, should.debug=should.debug)
+	    .populate(schema(obj), db.con, ins.vals=list(...), use.tables=use.tables, should.debug=should.debug)
 	    
 	    invisible(dbDisconnect(db.con))
 	  })
