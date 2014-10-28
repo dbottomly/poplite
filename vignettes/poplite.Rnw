@@ -207,15 +207,20 @@ vcf <- readVcf(fl, "hg19")
 @
 
 The first table we will create is a representation of the chromosome, location and reference positions where at least one variant was observed.  To do this we will create a function that takes a \texttt{VCF} object as input and returns a \texttt{data.frame}.
-This function and a subset of the \texttt{VCF} object is passed to the \texttt{makeSchemaFromFunction} helper function.  What this helper function does is to execute the desired function on a subset of the \texttt{VCF} object, determine the table structure
-from the returned \texttt{data.frame} and package the results in a \texttt{TableSchemaList} object.  It is important that the name(s) for the input objects match between the provided function, \texttt{makeSchemaFromFunction} and ultimately \texttt{populate}.
+This function and a subset of the \texttt{VCF} object is passed to the \texttt{makeSchemaFromFunction} helper function.  What this helper function does is execute the desired function on the provided \texttt{VCF} object, determine the table structure
+from the returned \texttt{data.frame} and package the results in a \texttt{TableSchemaList} object.  It is important that the name(s) for the input objects match between the provided function, \texttt{makeSchemaFromFunction} and ultimately \texttt{populate}. 
 
 <<eval=TRUE, echo=TRUE>>=
 
 populate.ref.table <- function(vcf.obj)
 {
     vcf.rows <- rowData(vcf.obj)
-    ref.dta <- cbind(seqnames=as.character(seqnames(vcf.rows)), as.data.frame(ranges(vcf.rows))[,c("start", "end")], REF=as.character(mcols(vcf.rows)$REF), stringsAsFactors=FALSE)
+    ref.dta <- cbind(
+                    seqnames=as.character(seqnames(vcf.rows)),
+                    as.data.frame(ranges(vcf.rows))[,c("start", "end")],
+                    ref=as.character(mcols(vcf.rows)$REF),
+                    stringsAsFactors=FALSE
+                    )
     return(ref.dta)
 }
 
@@ -223,30 +228,78 @@ vcf.sc <- makeSchemaFromFunction(populate.ref.table, "reference", vcf.obj=vcf[1:
 
 @
 
-Each variant position in our 'reference' table can have multiple alternatives (termed alleles) which were determined by the program generating the VCF file.  The 'alleles' table can be formed as follows:
+Each variant position in our 'reference' table can have multiple alternatives (termed alleles) which were determined by the genotyping program which generated the VCF file.  The 'alleles' table can be formed as follows:
 
 <<eval=TRUE, echo=TRUE>>=
 
 populate.allele.table <- function(vcf.obj)
 {
-    ref.dta <- populate.ref.table(vcf.obj)
-    
-    vcf.rows <- rowData(vcf.obj)
-    
-    num.alleles <- elementLengths(mcols(vcf.rows)$ALT)
-    
-    split.inds <- lapply(1:length(vcf.rows), function(x) rep(x, num.alleles[x]))
-        
-    allele.dta <- cbind(ref.dta[unlist(split.inds),], ALT=as.character(unlist(mcols(vcf.rows)$ALT)))
-        
-    return(allele.dta)
+    exp.obj <- expand(vcf.obj)
+    vcf.rows <- rowData(exp.obj)
+    ref.dta <- cbind(
+                    seqnames=as.character(seqnames(vcf.rows)),
+                    as.data.frame(ranges(vcf.rows))[,c("start", "end")],
+                    ref=as.character(mcols(vcf.rows)$REF),
+                    alt=as.character(mcols(vcf.rows)$ALT),
+                    stringsAsFactors=FALSE
+                    )
+    return(ref.dta)
 }
 
 allele.sc <- makeSchemaFromFunction(populate.allele.table, "alleles", vcf.obj=vcf[1:5])
 
-vcf.sc <- poplite::append(vcf.sc, allele.sc)
+vcf.sc <- append(vcf.sc, allele.sc)
 
 @
+
+Finally we can form a table that records the number of alternative alleles for each sample.  Implementation Note: the 'allele\_count' column is very simple due to fact that this example dataset
+only contains one alternative allele for each variant.  Multi-alleleic cases would have to be dealt with differently.
+
+<<eval=TRUE, echo=TRUE>>=
+
+populate.samp.alt.table <- function(vcf.obj)
+{
+    temp.vrange <- as(vcf.obj, "VRanges")
+    
+    ret.dta <- cbind(
+                        seqnames=as.character(seqnames(temp.vrange)),
+                        as.data.frame(ranges(temp.vrange))[,c("start", "end")],
+                        ref=ref(temp.vrange),
+                        alt=alt(temp.vrange),
+                        sample=as.character(sampleNames(temp.vrange)),
+                        allele_count=sapply(strsplit(temp.vrange$GT, "\\|"), function(x) sum(as.integer(x), na.rm=T)),
+                        stringsAsFactors=F
+                        )
+    
+    return(ret.dta[ret.dta$allele_count > 0,])
+}
+
+geno.all.sc <- makeSchemaFromFunction(populate.samp.alt.table, "sample_alleles", vcf.obj=vcf[1:5])
+
+vcf.sc <- append(vcf.sc, geno.all.sc)
+
+@
+
+Our relationships can be specified as before.  One wrinkle here is that there is a dependence in the table structures here that is more complicated than the sample tracking tables in the 'Basic Usage' section above.  The first
+relationship statement below will create a final 'alleles' table with the primary key of 'reference' and the 'alt' column.  As 'sample\_allleles' contains the full column structure of 'alleles' plus the 'sample' and 'allele\_count' columns
+it has to be first joined with reference to retrieve its primary key, then joined with the new 'alleles' table to get 'alleles' primary key with the final table resembling: 'alt\_ind', 'sample' and 'allele\_count'.  Just as '.' on the left hand
+side indicates the primary key of 
+
+<<eval=TRUE, echo=TRUE>>=
+
+relationship(vcf.sc, from="reference", to="alleles") <- .~seqnames+start+end+ref
+
+relationship(vcf.sc, from="reference", to="sample_alleles") <- .~seqnames+start+end+ref
+
+#need to fix me, maybe a shortcut to the primary key of reference
+try(relationship(vcf.sc, from="alleles", to="sample_alleles") <- .~.reference+alt)
+
+@
+
+Now that our schema is complete, we can populate our database with these three tables.  In this case, we can populate the entire database with one statement, however for demonstration purposes
+we will divide the \texttt{VCF} object into several pieces and populate them one at a time.
+
+
 
 \begin{center}
 

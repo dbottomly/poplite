@@ -520,6 +520,12 @@ test_that("Database population",{
     
     dbDisconnect(test.con)
     
+    #make sure that populate only provides the desired input...
+    
+    temp.db <- Database(sample.tracking, tempfile())
+    
+    expect_error(populate(temp.db, samples=samp.list$clinical, use.tables="clinical"))
+    
     assign(x="sample.tracking.db",  value=sample.tracking.db, envir=.GlobalEnv)
 })
 

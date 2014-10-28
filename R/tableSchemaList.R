@@ -180,7 +180,7 @@ setMethod("show", signature("TableSchemaList"), function(object)
           })
 
 #may need to use BiocGenerics at some point...
-setGeneric("append")
+
 setMethod("append", signature("TableSchemaList", "TableSchemaList"), function(x, values, after=length(x))
 	  {
 		 lengx <- length(x)
@@ -199,16 +199,25 @@ setMethod("length", signature("TableSchemaList"), function(x)
 		return(length(x@tab.list))
 	  })
 
-
-setMethod("subset", signature("TableSchemaList"), function(x, table.name)
-          {
-            if (all(table.name %in% names(x@tab.list)) == FALSE)
+subset.TableSchemaList <- function(x, table.name, ...)
+{
+    if (all(table.name %in% names(x@tab.list)) == FALSE)
             {
                 stop("ERROR: Only valid names can be used for subsetting")
             }
             
             return(new("TableSchemaList", tab.list=x@tab.list[table.name]))
-          })
+}
+
+#setMethod("subset", signature("TableSchemaList"), function(x, table.name)
+#          {
+#            if (all(table.name %in% names(x@tab.list)) == FALSE)
+#            {
+#                stop("ERROR: Only valid names can be used for subsetting")
+#            }
+#            
+#            return(new("TableSchemaList", tab.list=x@tab.list[table.name]))
+#          })
 
 makeSchemaFromFunction <- function(dta.func,name,...)
 {
@@ -251,7 +260,7 @@ makeSchemaFromData <- function(tab.df, name=NULL, primary.cols=NULL, dta.func=NU
   
   if (missing(dta.func) || is.null(dta.func))
     {
-	use.func <- eval(parse(text=paste0("function(x) x[['",name,"']]")))
+	use.func <- eval(parse(text=paste("function(",name,")", name)))
     }else{
 	use.func <- dta.func
     }
@@ -1104,7 +1113,16 @@ setMethod("bindDataFunction", signature("TableSchemaList"), function(obj, table.
         {
             table.mode <- match.arg(mode)
             
-            vcf.dta <- return.element(subset(obj, table.name), "dta.func")[[1]](bind.vals)
+	    cur.func <- return.element(subset(obj, table.name), "dta.func")[[1]]
+	    
+	    cur.forms <- formals(cur.func)
+	    
+	    if (all(names(cur.forms) %in% names(bind.vals)) == F)
+	    {
+		stop(paste("ERROR: Cannot find variables with names:", paste(names(cur.forms), collapse=",")))
+	    }
+	    
+            vcf.dta <- do.call(cur.func, bind.vals[names(cur.forms)])
             
             cur.cols <- colNames(obj, table.name, mode=table.mode)
             cur.schema <- colSchema(obj, table.name, mode=table.mode)

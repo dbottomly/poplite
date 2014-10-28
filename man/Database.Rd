@@ -44,7 +44,7 @@ Daniel Bottomly
 }
 \examples{
 
-if (require(Lahman))
+if (require(Lahman) && require(RSQLite))
 {
  baseball.teams <- makeSchemaFromData(TeamsFranchises, name="team_franch")
  baseball.teams <- append(baseball.teams, makeSchemaFromData(Teams, name="teams"))

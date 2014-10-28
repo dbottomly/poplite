@@ -1,5 +1,6 @@
 library(testthat)
 library(Lahman)
+library(RSQLite)
 
 test.db.1 <- function()
 {
