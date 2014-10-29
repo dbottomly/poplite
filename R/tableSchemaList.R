@@ -1253,25 +1253,32 @@ setMethod("colSchema", signature("TableSchemaList"), function(obj, table.name, m
     }
     else
     {
+	
 	foreign.schema <- foreignExtKeySchema(obj, table.name)
 	foreign.cols <- foreignExtKeyCols(obj, table.name)
 	local.cols <- foreignLocalKeyCols(obj, table.name)
 	
 	direct.keys <- directKeys(obj, table.name)
 	
-	keep.foreign.cols <- unlist(mapply(function(x,y){
-				    #also remove the columns that will be present in the final table but not part of the initial table but keep the direct keys
-				    rm.cols <- setdiff(y, direct.keys)
-				    should.keep <- (x %in% rm.cols == F) & (x %in% base.cols == F)
-				    return(should.keep)
-			       }, foreign.cols, local.cols))
+	unl.f.c <- as.character(unlist(foreign.cols))
+	unl.l.c <- as.character(unlist(local.cols))
+	
+	rm.cols <- setdiff(unl.l.c, direct.keys)
+	keep.foreign.cols <- (unl.f.c %in% rm.cols == F) & (unl.f.c %in% base.cols == F)
+	
+	#keep.foreign.cols <- unlist(mapply(function(x,y){
+	#			    #also remove the columns that will be present in the final table but not part of the initial table but keep the direct keys
+	#			    rm.cols <- setdiff(y, direct.keys)
+	#			    should.keep <- (x %in% rm.cols == F) & (x %in% base.cols == F)
+	#			    return(should.keep)
+	#		       }, foreign.cols, local.cols))
 	
 	rm.base.cols <- base.cols %in% setdiff(unlist(local.cols), direct.keys)
 	rm.base.cols <- rm.base.cols | base.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"
 	
 	if (type == "cols")
 	{
-	    return(as.character(c(unlist(foreign.cols)[keep.foreign.cols], base.cols[rm.base.cols == F])))
+	    return(as.character(c(unl.f.c[keep.foreign.cols], base.cols[rm.base.cols == F])))
 	}
 	else
 	{
@@ -1473,11 +1480,28 @@ setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, fro
                         }
                     }
                     
-                    #check to be sure that the values are in to
-                    if (all(cur.rhs %in% obj@tab.list[[to]]$db.cols) == F)
+		    #check if a variable is a reference to a primary key ie: .table
+		    #check to be sure that the values are in 'to'
+		    if (any(grepl("^\\.", cur.rhs, perl=T)))
+		    {
+			ref.pos <- grepl("^\\.", cur.rhs, perl=T)
+			ref.cols <- cur.rhs[ref.pos]
+			ref.tables <- sub("\\.", "", ref.cols)
+			
+			if (all(ref.tables %in% tables(obj)) == F)
+			{
+			    stop(paste("ERROR: invalid tables specified:", paste(setdiff(ref.tables, tables(obj)), collapse=",")))
+			}
+			
+			valid.refs <- as.character(sapply(ref.tables, function(x) obj@tab.list[[x]]$db.cols[obj@tab.list[[x]]$db.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"]))
+			
+			cur.rhs[ref.pos] <- valid.refs
+		    }
+		    else if (all(cur.rhs %in% obj@tab.list[[to]]$db.cols) == F)
                     {
                         stop("ERROR: All values on the rhs of the formula need to be in the 'to' table's columns")
                     }
+		    
                     
                     #additionally, they all need to be in from's as well
                     

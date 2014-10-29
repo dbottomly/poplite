@@ -283,7 +283,7 @@ vcf.sc <- append(vcf.sc, geno.all.sc)
 Our relationships can be specified as before.  One wrinkle here is that there is a dependence in the table structures here that is more complicated than the sample tracking tables in the 'Basic Usage' section above.  The first
 relationship statement below will create a final 'alleles' table with the primary key of 'reference' and the 'alt' column.  As 'sample\_allleles' contains the full column structure of 'alleles' plus the 'sample' and 'allele\_count' columns
 it has to be first joined with reference to retrieve its primary key, then joined with the new 'alleles' table to get 'alleles' primary key with the final table resembling: 'alt\_ind', 'sample' and 'allele\_count'.  Just as '.' on the left hand
-side indicates the primary key of 
+side indicates the primary key of the 'from' table.
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -291,28 +291,29 @@ relationship(vcf.sc, from="reference", to="alleles") <- .~seqnames+start+end+ref
 
 relationship(vcf.sc, from="reference", to="sample_alleles") <- .~seqnames+start+end+ref
 
-#need to fix me, maybe a shortcut to the primary key of reference
-try(relationship(vcf.sc, from="alleles", to="sample_alleles") <- .~.reference+alt)
+relationship(vcf.sc, from="alleles", to="sample_alleles") <- .~.reference+alt
 
 @
 
 Now that our schema is complete, we can populate our database with these three tables.  In this case, we can populate the entire database with one statement, however for demonstration purposes
 we will divide the \texttt{VCF} object into several pieces and populate them one at a time.
 
+<<eval=TRUE, echo=TRUE>>=
 
+vcf.db <- Database(vcf.sc, tempfile())
 
-\begin{center}
-
-<<fig=TRUE, echo=TRUE>>=
-
-plot(1:10,1:10)
+populate(vcf.db, vcf.obj=vcf[1:1000])
 
 @
 
-\end{center}
 
 
 
+\section{Future Directions}
+
+Addition of methods for setting constraints as well as indicating whether INSERT should ignore duplicate rows.  This is already supported internally so can be done in a pinch.
+
+Support for between table 'OR' statements in \texttt{filter}.
 
 
 <<eval=TRUE>>=
