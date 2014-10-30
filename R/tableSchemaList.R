@@ -14,7 +14,7 @@ tsl.to.graph <- function(tsl)
                 else
                 {
                     common.col <- intersect(x$db.cols, cur.edges)
-                    use.fk <- sapply(x$foreign.keys, function(x) x$local.keys %in% common.col)
+                    use.fk <- sapply(x$foreign.keys, function(x) all(x$local.keys %in% common.col))
                     return(names(use.fk)[use.fk == TRUE])
                 }
            })
@@ -173,6 +173,12 @@ setMethod("show", signature("TableSchemaList"), function(object)
     
 			    }
 			}
+			
+			if (object@tab.list[[i]]$db.constr != "")
+			{
+			    constr.cols <- gsub("\\s+", "", regmatches(object@tab.list[[i]]$db.constr, regexec("\\((.+)\\)", object@tab.list[[i]]$db.constr))[[1]][2])
+			    message(paste("      - Uniqueness constraints on:", constr.cols))
+			}
 		    }
 		}
 		
@@ -236,7 +242,7 @@ makeSchemaFromFunction <- function(dta.func,name,...)
     makeSchemaFromData(do.call(dta.func, pass.objs), name=name, dta.func=dta.func)
 }
 
-makeSchemaFromData <- function(tab.df, name=NULL, primary.cols=NULL, dta.func=NULL)
+makeSchemaFromData <- function(tab.df, name=NULL, dta.func=NULL)
 {
   if (missing(name) || is.null(name) || is.na(name))
   {
@@ -267,20 +273,10 @@ makeSchemaFromData <- function(tab.df, name=NULL, primary.cols=NULL, dta.func=NU
   
   cur.list <- list(db.cols=character(0), db.schema=character(0), db.constr="", dta.func=use.func , should.ignore=T, foreign.keys=NULL)
   
-  if (missing(primary.cols) || is.null(primary.cols) || is.na(primary.cols))
-  {
-      cur.list$db.constr <- ""
-      cur.list$db.cols <- paste0(name, "_ind")
-      cur.list$db.schema <- "INTEGER PRIMARY KEY AUTOINCREMENT"
-  }
-  else if (is.character(primary.cols) && is.null(names(tab.df)) == F && all(primary.cols %in% names(tab.df)))
-  {
-      cur.list$db.constr <- paste0("CONSTRAINT ", name, "_idx UNIQUE (", paste(primary.cols, collapse=",") ,")")
-  }
-  else
-  {
-      stop("ERROR: primary.cols needs to be NULL or a character vector corresponding to the names of tab.df")
-  }
+    cur.list$db.constr <- ""
+    cur.list$db.cols <- paste0(name, "_ind")
+    cur.list$db.schema <- "INTEGER PRIMARY KEY AUTOINCREMENT"
+ 
   
   cur.list$db.cols <- append(cur.list$db.cols, names(tab.df))
   
@@ -485,6 +481,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		#the joining needs to take into account not just the direct keys from one table to the next but also the necessary
 		#keys if one table has already been merged to another as well as any keys that are shared between the tables that
 		#were derived from a downstream table
+		
 		join.cols <- lapply(1:(length(use.path)-1), function(x) {
 		    
 		    #probably don't need this code, as the below addition should address this issue and then some
@@ -1328,6 +1325,7 @@ setMethod("directKeys", signature("TableSchemaList"), function(obj, table.name)
 setGeneric("mergeStatement", def=function(obj, ...) standardGeneric("mergeStatement"))
 setMethod("mergeStatement", signature("TableSchemaList"), function(obj, table.name)
           {
+	    
                 #currently, probably the temporary table
                 cur.db <- tableName(obj, table.name, mode="merge")
                 #table trying to create
@@ -1347,13 +1345,17 @@ setMethod("mergeStatement", signature("TableSchemaList"), function(obj, table.na
                     stop("ERROR: Cannot generate statement if the foreign key element is NULL")
                 }
                 
-                keys <- sapply(names(fk), function(y)
+		#don't merge on the tables that have direct keys
+		is.direct.keys <- sapply(fk, function(x) length(intersect(x$local.keys, x$ext.keys)) == length(union(x$local.keys, x$ext.keys)))
+		
+		fk <- fk[is.direct.keys == F] 
+		
+                keys <- sapply(fk, function(y)
                        {
-                            return(paste(fk[[y]]$ext.keys, collapse=","))
+                            return(paste(y$ext.keys, collapse=","))
                        })
 		
-		
-                join.statement <- paste(paste("JOIN", names(keys), "USING", paste0("(", keys,")")), collapse=" ")
+		join.statement <- paste(paste("JOIN", names(keys), "USING", paste0("(", keys,")")), collapse=" ")
 		
 		#in case columns besides the keys are duplicated, make sure the select statement refers to the appropriate table
                 
@@ -1370,7 +1372,6 @@ setMethod("mergeStatement", signature("TableSchemaList"), function(obj, table.na
 		}
 		
 		plain.targs <- paste(target.cols, collapse=",")
-		
 		
 		paste.targs <- paste(paste(names(target.cols), target.cols, sep="."), collapse=",")
 		
@@ -1410,15 +1411,15 @@ setMethod("insertStatement", signature("TableSchemaList"), function(obj, table.n
                 return(paste("INSERT",ignore.str,"INTO", tableName(obj, table.name, table.mode), "VALUES (", paste(paste0(":", use.cols), collapse=","), ")"))
           })
 
-get.model.side <- function(form, side=c("left", "right"))
+.get.model.side <- function(form, side=c("left", "right"), num.components=3)
 {    
     side <-  match.arg(side)
     
     char.form <- as.character(form)
     
-    if (length(char.form) == 3)
+    if (length(char.form) == num.components)
     {
-        use.ind <- switch(side, right=3, left=2)
+        use.ind <- switch(side, right=num.components, left=num.components-1)
         
         split.lhs <- strsplit(char.form[use.ind], "\\s+\\+\\s+")[[1]]
         return(split.lhs)
@@ -1433,18 +1434,83 @@ get.model.side <- function(form, side=c("left", "right"))
 
 rhs <- function(form)
 {
-    get.model.side(form, "right")
+    .get.model.side(form, "right")
 }
 
 lhs <- function(form)
 {
-    get.model.side(form, "left")
+    .get.model.side(form, "left")
 }
 
-setGeneric("relationship<-", def=function(obj, from, to, value) standardGeneric("relationship<-"))
-setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, from, to, value)
+#check if a variable is a reference to a primary key ie: .table
+#check to be sure that the values are in 'to'
+.resolve.rhs.fk <- function(obj, cur.rhs, cur.tab)
+{
+    if (any(grepl("^\\.", cur.rhs, perl=T)))
+    {
+	ref.pos <- grepl("^\\.", cur.rhs, perl=T)
+	ref.cols <- cur.rhs[ref.pos]
+	ref.tables <- sub("\\.", "", ref.cols)
+	
+	if (all(ref.tables %in% tables(obj)) == F)
+	{
+	    stop(paste("ERROR: invalid tables specified:", paste(setdiff(ref.tables, tables(obj)), collapse=",")))
+	}
+	
+	valid.refs <- as.character(sapply(ref.tables, function(x) obj@tab.list[[x]]$db.cols[obj@tab.list[[x]]$db.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"]))
+	
+	cur.rhs[ref.pos] <- valid.refs
+    }
+    else if (all(cur.rhs %in% obj@tab.list[[cur.tab]]$db.cols) == F)
+    {
+	stop("ERROR: All values on the rhs of the formula need to be in the 'to' table's columns")
+    }
+    
+    return(cur.rhs)
+}
+
+setGeneric("constraint<-", def=function(obj, table.name,..., value) standardGeneric("constraint<-"))
+setReplaceMethod("constraint", signature("TableSchemaList"), function(obj, table.name,value, should.ignore=T, constr.name=NULL)
+		 {
+		    
+		    if (missing(table.name) || is.null(table.name) || length(table.name) != 1  || is.na(table.name) || all(table.name %in% tables(obj))==F)
+		    {
+			stop("ERROR: please supply a single valid table for 'table.name'")
+		    }
+		    
+		    if (missing(constr.name) || is.null(constr.name))
+		    {
+			constr.name <- paste(table.name, "idx", sep="_")
+		    }
+		    
+		    if (length(should.ignore) != 1 || is.logical(should.ignore) == F)
+		    {
+			stop("ERROR: should.ignore should be a single logial value")
+		    }
+		    
+		    if (is.null(value))
+		    {
+			
+			obj@tab.list[[table.name]]$db.constr <- ""
+			
+		    }else{
+			cur.rhs <- .get.model.side(value, "right", num.components=2)
+		    
+			cur.rhs <- .resolve.rhs.fk(obj, cur.rhs, table.name)
+			
+			obj@tab.list[[table.name]]$db.constr <- paste("CONSTRAINT",constr.name,"UNIQUE (",paste(cur.rhs, collapse=","),")")
+		    }
+		    
+                    obj@tab.list[[table.name]]$should.ignore <- should.ignore
+		    
+		    validObject(obj)
+                    return(obj)
+		    
+		 })
+
+setGeneric("relationship<-", def=function(obj, ..., value) standardGeneric("relationship<-"))
+setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, value, from, to)
                  {
-                   
                     #check to be sure 'from' comes before 'to'
                     
                     from.pos <- which(names(obj@tab.list) == from)
@@ -1454,11 +1520,11 @@ setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, fro
                     {
                         stop("ERROR: The 'from' table needs to be specified before the 'to' table")
                     }
-                    
+		    
                     cur.lhs <- lhs(value)
                     cur.rhs <- rhs(value)
                     
-                    if (cur.lhs == ".")
+                    if (length(cur.lhs) == 1 && cur.lhs == ".")
                     {
                         #check to see if there is an auto-incremented primary key for from
                         which.prim <- which(obj@tab.list[[from]]$db.schema == "INTEGER PRIMARY KEY AUTOINCREMENT")
@@ -1479,29 +1545,8 @@ setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, fro
                             stop("ERROR: All values on the lhs of the formula need to be in the 'from' table's columns")
                         }
                     }
-                    
-		    #check if a variable is a reference to a primary key ie: .table
-		    #check to be sure that the values are in 'to'
-		    if (any(grepl("^\\.", cur.rhs, perl=T)))
-		    {
-			ref.pos <- grepl("^\\.", cur.rhs, perl=T)
-			ref.cols <- cur.rhs[ref.pos]
-			ref.tables <- sub("\\.", "", ref.cols)
-			
-			if (all(ref.tables %in% tables(obj)) == F)
-			{
-			    stop(paste("ERROR: invalid tables specified:", paste(setdiff(ref.tables, tables(obj)), collapse=",")))
-			}
-			
-			valid.refs <- as.character(sapply(ref.tables, function(x) obj@tab.list[[x]]$db.cols[obj@tab.list[[x]]$db.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"]))
-			
-			cur.rhs[ref.pos] <- valid.refs
-		    }
-		    else if (all(cur.rhs %in% obj@tab.list[[to]]$db.cols) == F)
-                    {
-                        stop("ERROR: All values on the rhs of the formula need to be in the 'to' table's columns")
-                    }
 		    
+		    cur.rhs <- .resolve.rhs.fk(obj, cur.rhs, to)
                     
                     #additionally, they all need to be in from's as well
                     

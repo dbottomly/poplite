@@ -11,7 +11,7 @@ These functions facilitate the creation of \code{TableSchemaList} objects from
 existing or supplementary R data structures such as the \code{data.frame}.
 }
 \usage{
-makeSchemaFromData(tab.df, name=NULL, primary.cols=NULL,dta.func=NULL)
+makeSchemaFromData(tab.df, name=NULL,dta.func=NULL)
 makeSchemaFromFunction(dta.func, name,\dots)
 correct.df.names(tab.df)
 }
@@ -22,10 +22,6 @@ A \code{data.frame} representing a database table
 }
   \item{name}{
 Desired name of the database table
-}
-\item{primary.cols}{
-	An optional character vector containing the columns that uniquely identify a given row.  If missing or NULL,
-	an autoincremented integer is used instead.
 }
 \item{dta.func}{
 	An optional function which will take a specified object and turn it into a SQLite table.  The function parameters should have the same names as the objects supplied to \code{populate}.

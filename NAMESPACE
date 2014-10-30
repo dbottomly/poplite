@@ -5,9 +5,10 @@ importFrom(RSQLite, dbBeginTransaction, dbGetPreparedQuery,SQLite)
 importFrom(BiocGenerics, append)
 importFrom(lazyeval, lazy_eval, lazy_dots, lazy)
 importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V)
+
 #methods
 export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, makeSchemaFromFunction, append, length, 'relationship<-', schema, dbFile,
-tables, columns)
+	tables, columns, 'constraint<-')
 
 S3method(filter_, Database)
 S3method(select_, Database)

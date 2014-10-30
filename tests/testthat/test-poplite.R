@@ -177,7 +177,28 @@ test_that("Another, more complex TBSL example based off a sample tracking use ca
     
     expect_equal(sample.tracking@tab.list$samples$foreign.keys$dna, list(local.keys="dna_ind", ext.keys=c("sample_id", "wave")))
     
+    
     assign(x="sample.tracking",  value=sample.tracking, envir=.GlobalEnv)
+})
+
+test_that("constraint<- method is sane",{
+    
+    constraint(sample.tracking, "dna") <- ~ sample_id + wave
+    expect_equal(gsub("\\s+", "", sample.tracking@tab.list$dna$db.constr), gsub("\\s+", "", "CONSTRAINT dna_idx UNIQUE (sample_id, wave)"))
+    
+    expect_true(grepl(gsub("\\s+", "", "CONSTRAINT dna_idx UNIQUE (sample_id, wave)"), gsub("\\s+", "", createTable(sample.tracking, 'dna', mode='normal')), fixed=T))
+    expect_true(grepl("INSERT\\s+OR\\s+IGNORE", insertStatement(sample.tracking, 'dna')))
+    
+    constraint(sample.tracking, "dna", should.ignore=F, constr.name="test") <- ~ sample_id + wave
+    expect_identical(gsub("\\s+", "", sample.tracking@tab.list$dna$db.constr), gsub("\\s+", "", "CONSTRAINT test UNIQUE (sample_id, wave)"))
+    expect_true(sample.tracking@tab.list$dna$should.ignore == F)
+    
+    expect_true(grepl(gsub("\\s+", "", "CONSTRAINT test UNIQUE (sample_id, wave)"), gsub("\\s+", "", createTable(sample.tracking, 'dna', mode='normal')), fixed=T))
+    expect_true(grepl("INSERT\\s+INTO", insertStatement(sample.tracking, 'dna')))
+    
+    constraint(sample.tracking, "dna", should.ignore=F) <- NULL
+    expect_true(sample.tracking@tab.list$dna$db.constr == "")
+    expect_true(sample.tracking@tab.list$dna$should.ignore == F)
 })
 
 test_that("createTable",
@@ -273,9 +294,6 @@ test_that("createTable",
                 rownames(ord.prag) <- NULL
                 rownames(ord.query) <- NULL
                 
-                print(ord.prag)
-                print(ord.query)
-                
                 expect_equal(ord.prag, ord.query)
             }
         }
@@ -361,6 +379,7 @@ test_that("mergeStatement",
     {
         #again if there are no foreign keys make sure the query dies
         f.keys <- tbsl@tab.list[[i]]$foreign.keys
+        
         print(i)
         if (is.null(f.keys))
         {
@@ -368,6 +387,12 @@ test_that("mergeStatement",
         }
         else
         {
+            #only consider the f.keys which are not direct
+            
+            is.direct.keys <- sapply(f.keys, function(x) length(intersect(x$local.keys, x$ext.keys)) == length(union(x$local.keys, x$ext.keys)))
+            
+            f.keys <- f.keys[is.direct.keys == F]
+            
             cur.stat <- mergeStatement(tbsl, i)
             
             #is the insert statement table definition consistent
@@ -505,7 +530,6 @@ test_that("Database population",{
     
     test.samples.merge <- merge(test.samples, test.dna, all=F)
     
-    test.samples.merge <- test.samples.merge[test.samples.merge$sample_id %in% samp.list$clinical$sample_id,]
     test.samples.merge <- test.samples.merge[,names(db.tab.list[['samples']])]
     test.samples.merge <- convert.factors.to.strings(test.samples.merge)
     test.samples.merge <- test.samples.merge[do.call('order', test.samples.merge),]
@@ -614,26 +638,35 @@ test_that("Querying with Database objects",
     nt.res <- as.data.frame(select(sample.tracking.db, sample_id:dna_ind, sample_id:status))
     
     expect_true(all(names(nt.res) %in% use.cols))
-    expect_equal(nt.res[,use.cols], two.tab.cols[,use.cols])
+    
+    nt.comp <- nt.res[do.call("order", nt.res[,use.cols]),use.cols]
+    two.tab.cols <- two.tab.cols[do.call("order", two.tab.cols[,use.cols]),use.cols]
+    
+    expect_equal(nt.comp, two.tab.cols, check.attributes=F)
     
     #again specifying tables
     
     td.res <- as.data.frame(select(sample.tracking.db, samples.sample_id:dna_ind, clinical.sample_id:status))
     
     expect_true(all(names(td.res) %in% use.cols))
-    expect_equal(td.res[,use.cols], two.tab.cols[,use.cols])
+    
+    td.res <- td.res[do.call("order", td.res[,use.cols]),use.cols]
+    
+    expect_equal(td.res, two.tab.cols, check.attributes=F)
     
     #or via the .tables mechanism this should not work
     
     expect_error(select(sample.tracking.db, sample_id:dna_ind, sample_id:status, .tables=c("clinical", "samples")))
     
     #there were a few additional ones, check whether mixed named, unnamed works
-    
-    #this doesn't work currently
+ 
     nu.res <- as.data.frame(select(sample.tracking.db, samples.sample_id:dna_ind, sample_id:status))
     
     expect_true(all(names(nu.res) %in% use.cols))
-    expect_equal(nu.res[,use.cols], two.tab.cols[,use.cols])
+    
+    nu.res <- nu.res[do.call("order", nu.res[,use.cols]), use.cols]
+    
+    expect_equal(nu.res, two.tab.cols, check.attributes=F)
     
     #bug that came up when preparing the examples
     
@@ -691,4 +724,63 @@ test_that("Querying with Database objects",
    
     #filter(sample.tracking.db, clinical.(status == 1 & sex == "m") | dna.wave==2)
 })
+
+test_that("sample tracking example but with direct keys between dna and samples", {
+    
+    db.list <- test.db.1()
+    
+    sample.tracking <- new("TableSchemaList")
+    
+    clinical <- makeSchemaFromData(db.list$clinical, name="clinical")
+    
+    sample.tracking <- append(sample.tracking, clinical)
+    
+    samples <- makeSchemaFromData(db.list$samples, name="samples")
+    
+    sample.tracking <- append(sample.tracking, samples)
+    
+    db.list$dna <- correct.df.names(db.list$dna)
+    
+    dna <- makeSchemaFromData(db.list$dna, name="dna")
+    
+    sample.tracking <- append(sample.tracking, dna)
+    
+    relationship(sample.tracking, from="clinical", to="samples") <- sample_id~sample_id
+    
+    relationship(sample.tracking, from="clinical", to="dna") <-sample_id~sample_id
+    
+    #Here, db.cols (and db.schema) should be modified so that sample and wave in samples should be replaced with dna's autoinc pk
+    relationship(sample.tracking, from="samples", to="dna") <- sample_id+wave~sample_id+wave
+    
+    temp.st.db <- Database(sample.tracking, tempfile())
+    
+    do.call(populate, append(list(temp.st.db),db.list))
+    
+    #this query was seen to fail
+    samp.dna.join <- select(temp.st.db, .tables=c("samples", "dna"))
+    
+    test.con <- dbConnect(SQLite(), dbFile(temp.st.db))
+    
+    #start with some basic select queries
+    
+    db.tab.list <- lapply(tables(temp.st.db), function(x)
+           {
+                dbReadTable(test.con, x)
+           })
+    
+    names(db.tab.list) <- tables(temp.st.db)
+    
+    samp.dna.merge <- merge(db.tab.list$samples, db.tab.list$dna, by=c("sample_id", "wave"), all=F)
+    
+    samp.dna.merge <- convert.factors.to.strings(samp.dna.merge)
+    samp.dna.merge <- samp.dna.merge[do.call("order", samp.dna.merge),]
+    
+    samp.dna.join <- convert.factors.to.strings(as.data.frame(samp.dna.join))[,names(samp.dna.merge)]
+    samp.dna.join <- samp.dna.join[do.call("order", samp.dna.join),]
+    
+    expect_equal(samp.dna.merge, samp.dna.join, check.attributes=F)
+    
+})
+
+
 
