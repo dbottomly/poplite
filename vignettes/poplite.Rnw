@@ -102,7 +102,7 @@ relationship(sample.tracking, from="clinical", to="dna") <-sample_id~sample_id
 @
 
 In addition, the 'dna' table can be referred to by the 'samples' table using a combination of 'sample\_id' and 'wave' and vice versa.  Instead of directly cross referencing these columns as we did for 'sample\_id', we specify that we want to use the 'primary key'
-of 'samples' in 'dna' as opposed to the combination of 'sample_id' and 'wave' (though 'sample_id' will still be kept as it links to the 'clinical' table).  Where the primary key is a column of integer values that uniquely identifies each row and by default it was added
+of 'samples' in 'dna' as opposed to the combination of 'sample\_id' and 'wave' (though 'sample\_id' will still be kept as it links to the 'clinical' table).  Where the primary key is a column of integer values that uniquely identifies each row and by default it was added
 automatically by \texttt{makeSchemaFromData}.  We can specify this in the following manner:
 
 <<eval=TRUE, echo=TRUE>>=
@@ -113,7 +113,7 @@ relationship(sample.tracking, from="samples", to="dna") <- .~sample_id+wave
 
 Where '.' is a shortcut that indicates that the primary key for the table should be used.  Now that our schema is complete, we are now ready to populate our database.  First, we create a \texttt{Database} object which simply contains both the schema as well as
 the file path to where the database resides.  We then call the \texttt{populate} method and provide it with our named \texttt{data.frames}.  At this point it is important to note that by default specifying a relationship between two tables in this manner will result in the 'to'
-table being limited to only those values in common between the two tables.  For example specifying the sample_id+wave relationship between 'samples' and 'dna' will result in the 'dna' table being limited to only those with DNA specimens that have sample IDs and wave values
+table being limited to only those values in common between the two tables.  For example specifying the sample\_id+wave relationship between 'samples' and 'dna' will result in the 'dna' table being limited to only those with DNA specimens that have sample IDs and wave values
 in the 'samples' table.  The easiest way to address this issue is to directly specify the relationship columns as oppose to referencing the primary keys of a given table.
 
 <<eval=TRUE, echo=TRUE>>=
@@ -187,6 +187,8 @@ samp.tab <- tbl(src.db, "samples")
 dna.tab <- tbl(src.db, "dna")
 wave.1.samp.dplyr <- inner_join(filter(samp.tab, wave == 1), dna.tab, by=c("samples_ind", "sample_id"))
 
+library(RSQLite)
+
 #RSQLite
 samp.db <- dbConnect(SQLite(), dbFile(sample.tracking.db))
 wave.1.samp.sql <- dbGetQuery(samp.db, 'SELECT * FROM samples JOIN dna USING (samples_ind, sample_id) WHERE wave == 1')
@@ -219,11 +221,10 @@ from the returned \texttt{data.frame} and package the results in a \texttt{Table
 
 populate.ref.table <- function(vcf.obj)
 {
-    vcf.rows <- rowData(vcf.obj)
     ref.dta <- cbind(
-                    seqnames=as.character(seqnames(vcf.rows)),
-                    as.data.frame(ranges(vcf.rows))[,c("start", "end")],
-                    ref=as.character(mcols(vcf.rows)$REF),
+                    seqnames=as.character(seqnames(vcf.obj)),
+                    as.data.frame(ranges(vcf.obj))[,c("start", "end")],
+                    ref=as.character(ref(vcf.obj)),
                     stringsAsFactors=FALSE
                     )
     return(ref.dta)
@@ -240,12 +241,11 @@ Each variant position in our 'reference' table can have multiple alternatives (t
 populate.allele.table <- function(vcf.obj)
 {
     exp.obj <- expand(vcf.obj)
-    vcf.rows <- rowData(exp.obj)
     ref.dta <- cbind(
-                    seqnames=as.character(seqnames(vcf.rows)),
-                    as.data.frame(ranges(vcf.rows))[,c("start", "end")],
-                    ref=as.character(mcols(vcf.rows)$REF),
-                    alt=as.character(mcols(vcf.rows)$ALT),
+                    seqnames=as.character(seqnames(exp.obj)),
+                    as.data.frame(ranges(exp.obj))[,c("start", "end")],
+                    ref=as.character(ref(exp.obj)),
+                    alt=as.character(alt(exp.obj)),
                     stringsAsFactors=FALSE
                     )
     return(ref.dta)
@@ -253,7 +253,7 @@ populate.allele.table <- function(vcf.obj)
 
 allele.sc <- makeSchemaFromFunction(populate.allele.table, "alleles", vcf.obj=vcf[1:5])
 
-vcf.sc <- append(vcf.sc, allele.sc)
+vcf.sc <- poplite::append(vcf.sc, allele.sc)
 
 @
 
@@ -272,7 +272,8 @@ populate.samp.alt.table <- function(vcf.obj)
                         ref=ref(temp.vrange),
                         alt=alt(temp.vrange),
                         sample=as.character(sampleNames(temp.vrange)),
-                        allele_count=sapply(strsplit(temp.vrange$GT, "\\|"), function(x) sum(as.integer(x), na.rm=T)),
+                        allele_count=sapply(strsplit(temp.vrange$GT, "\\|"),
+                                function(x) sum(as.integer(x), na.rm=T)),
                         stringsAsFactors=F
                         )
     
@@ -281,14 +282,14 @@ populate.samp.alt.table <- function(vcf.obj)
 
 geno.all.sc <- makeSchemaFromFunction(populate.samp.alt.table, "sample_alleles", vcf.obj=vcf[1:5])
 
-vcf.sc <- append(vcf.sc, geno.all.sc)
+vcf.sc <- poplite::append(vcf.sc, geno.all.sc)
 
 @
 
-Our relationships can be specified as before.  One wrinkle here is that there is a dependence in the table structures here that is more complicated than the sample tracking tables in the 'Basic Usage' section above.  The first
+Our relationships can be specified as before.  One wrinkle here is that there is a dependence in the table structures that is more complicated than the sample tracking tables in the 'Basic Usage' section above.  The first
 relationship statement below will create a final 'alleles' table with the primary key of 'reference' and the 'alt' column.  As 'sample\_allleles' contains the full column structure of 'alleles' plus the 'sample' and 'allele\_count' columns
 it has to be first joined with reference to retrieve its primary key, then joined with the new 'alleles' table to get 'alleles' primary key with the final table resembling: 'alt\_ind', 'sample' and 'allele\_count'.  Just as '.' on the left hand
-side indicates the primary key of the 'from' table.
+side indicates the primary key of the 'from' table the '.reference' variable indicates the primary key of the reference table.
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -300,8 +301,10 @@ relationship(vcf.sc, from="alleles", to="sample_alleles") <- .~.reference+alt
 
 @
 
-Now that our schema is complete, we can populate our database with these three tables.  In this case, we can populate the entire database with one statement, however for demonstration purposes
-we will divide the \texttt{VCF} object into several pieces and populate them one at a time.
+Now that our schema is complete, we can populate our three tables in the database.  In this case, we can populate the entire database with one statement, however for demonstration purposes
+we will divide the \texttt{VCF} object into several pieces and populate them one at a time to simulate reading from a large file in chunks or iterating over several files.  Also note that
+the 'constraint<-' method is available to provide a mechanism to enforce uniqueness of a subset of columns for a given table which is especially useful if the database is being populated from many files
+which may have duplicate data.
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -309,9 +312,31 @@ vcf.db <- Database(vcf.sc, tempfile())
 
 populate(vcf.db, vcf.obj=vcf[1:1000])
 
-try(pop.res <- poplite::select(vcf.db, .tables=tables(vcf.db)))
+populate(vcf.db, vcf.obj=vcf[1001:2000])
 
-vrange.tab <- as(vcf[1:1000], "VRanges")
+pop.res <- as.data.frame(poplite::select(vcf.db, .tables=tables(vcf.db)))
+
+vrange.tab <- as(vcf[1:2000], "VRanges")
+
+vrange.dta <- data.frame(seqnames=as.character(seqnames(vrange.tab)),
+                         start=start(vrange.tab),
+                         end=end(vrange.tab),
+                         ref=as.character(ref(vrange.tab)),
+                         alt=as.character(alt(vrange.tab)),
+                         sample=as.character(sampleNames(vrange.tab)),
+                         allele_count=sapply(strsplit(vrange.tab$GT, "\\|"),
+                                function(x) sum(as.integer(x), na.rm=T)),
+                         stringsAsFactors=F)
+
+vrange.dta <- vrange.dta[vrange.dta$allele_count > 0,]
+
+vrange.dta <- vrange.dta[do.call("order", vrange.dta),]
+
+sub.pop.res <- pop.res[,names(vrange.dta)]
+
+sub.pop.res <- sub.pop.res[do.call("order", sub.pop.res),]
+
+all.equal(sub.pop.res, vrange.dta, check.attributes=F)
 
 @
 

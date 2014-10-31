@@ -1,8 +1,7 @@
 import(dplyr)
 import(methods)
-importFrom(DBI, dbGetQuery, dbExistsTable, dbCommit, dbConnect, dbDisconnect, make.db.names.default, dbListTables)
-importFrom(RSQLite, dbBeginTransaction, dbGetPreparedQuery,SQLite)
-importFrom(BiocGenerics, append)
+importFrom(DBI, dbGetQuery, dbBegin, dbExistsTable, dbCommit, dbConnect, dbDisconnect, make.db.names.default, dbListTables)
+importFrom(RSQLite, dbGetPreparedQuery,SQLite)
 importFrom(lazyeval, lazy_eval, lazy_dots, lazy)
 importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V)
 
