@@ -2,10 +2,12 @@
 \usepackage[margin=1.0in]{geometry}
 \usepackage[utf8]{inputenc}
 \usepackage[parfill]{parskip}
+\usepackage{hyperref}
+\usepackage{natbib}
 \SweaveOpts{keep.source=TRUE} 
 
 \title{poplite vignette}
-\author{Daniel Bottomly}
+\author{Daniel Bottomly and Beth Wilmot}
 %\VignetteIndexEntry{poplite}
 \begin{document}
 
@@ -17,15 +19,16 @@ Prior to utilizing a given database in a research context, it has to be designed
 The loading can be as simple as just inserting data into a given table or in addition it may need to respect columns from other tables.  The \texttt{poplite} package was developed
 originally to simplify the process of population and management of SQLite databases using R.  It provides a schema object and corresponding methods which allows a user to easily
 understand the database structure as well as extend or modify it.  The database can be populated using this schema and the user can specify both raw data and a transformational function
-to apply prior to loading.  This functionality facilitates loading of large, non-\texttt{data.frame} type objects as is demonstrated in the 'Advanced Usage' section.  It has since also incorportated
-and extended functionality from the \texttt{dplyr} package to provide a convienient query interface using \texttt{dplyr}'s verbs.  Notably, cross table queries can be carried out automatically using
+to apply prior to loading.  This functionality facilitates loading of large, non-\texttt{data.frame} type objects as is demonstrated below in the 'VCF Database' section.  It has since also incorportated
+and extended functionality from the \texttt{dplyr} package \citep{Wickham2014} to provide a convienient query interface using \texttt{dplyr}'s verbs.  Notably, cross table queries can be carried out automatically using
 the specified schema object.
 
-\section{Basic Usage}
+\section{Sample Tracking Database}
 
-We will start by working through a simple example that illustrates how to use \texttt{poplite} for many common database tasks.  Our example is a set of 3 \texttt{data.frames} which consists of
-randomly generated data which is meant to resemble data collected on patients in a clinical research setting.  We first load the package and the example data, going through each \texttt{data.frame}
-in turn.
+We will start by working through a simple example that illustrates how to use \texttt{poplite} for many common database tasks. Here we will create a sample tracking database for DNA specimens collected on patients in a clinical research setting.
+Our example is a set of 3 \texttt{data.frames} which consists of randomly generated values resembling commonly collected data.  We first load the package and the example data, going through each \texttt{data.frame} in turn.
+
+\subsection{Database Population}
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -60,7 +63,7 @@ head(dna)
 @
 
 As these data are already in table form, loading them should be relatively straightforward.  The first step is the creation of a schema object of class \texttt{TableSchemaList} whose
-name may give the user some indication about its internal structure.  For \texttt{data.frames} a convience function (\texttt{makeSchemaFromData}) is provided which does some basic checks
+name is descriptive of the data therein.  For \texttt{data.frames} a convenience function (\texttt{makeSchemaFromData}) is provided which does some basic checks
 and creates an appropriate table based on the column names and inferred types.
 
 <<eval=TRUE, echo=TRUE>>=
@@ -75,7 +78,7 @@ try(dna.tbsl <- makeSchemaFromData(dna, "dna"))
 
 @
 
-The error caused by attempting to create a schema object from dna, is due to the formatting of the column name of 'ng.ul' which is a valid R name, but not a valid SQLite name.  A convienient way to
+The error caused by attempting to create a schema object from the 'dna' \texttt{data.frame}, is due to the formatting of the column name of 'ng.ul' which is a valid R name, but not a valid SQLite name.  A convienient way to
 fix this is to use the \texttt{correct.df.names} function as below.  Note that this modified \texttt{data.frame} will be the one that has to be provided to the \texttt{populate} method.
 
 <<eval=TRUE, echo=TRUE>>=
@@ -91,30 +94,19 @@ At this point, the database can be created and populated using the schema define
 who wants to query across the tables be able to determine the relationships between the tables.  In some cases this can be determined by column names alone, in other cases it may not be so clear.  The \texttt{poplite}
 package allows the specification of relationships between tables using the R formula syntax.  This functionality is probably best illustrated by example.
 
-The 'clinical' table is the starting point of this database as both the 'samples' and 'dna' tables refer back to its.  In the case of both the 'samples' and 'dna' tables, the 'clinical' table can be refered to using the 'sample\_id' column.
-This type of relationship can be created by the following:
+The 'clinical' table is the starting point of this database as both the 'samples' and 'dna' tables refer back to it.  In the case of both the 'samples' and 'dna' tables, the 'clinical' table can be refered to using the 'sample\_id' column.
+In addition, the 'dna' table can be referred to by the 'samples' table using a combination of 'sample\_id' and 'wave' and vice versa.  These types of relationship can be created by the following:
 
 <<eval=TRUE, echo=TRUE>>=
 
 relationship(sample.tracking, from="clinical", to="samples") <- sample_id~sample_id
 relationship(sample.tracking, from="clinical", to="dna") <-sample_id~sample_id
 
+relationship(sample.tracking, from="samples", to="dna") <- sample_id+wave~sample_id+wave
 @
 
-In addition, the 'dna' table can be referred to by the 'samples' table using a combination of 'sample\_id' and 'wave' and vice versa.  Instead of directly cross referencing these columns as we did for 'sample\_id', we specify that we want to use the 'primary key'
-of 'samples' in 'dna' as opposed to the combination of 'sample\_id' and 'wave' (though 'sample\_id' will still be kept as it links to the 'clinical' table).  Where the primary key is a column of integer values that uniquely identifies each row and by default it was added
-automatically by \texttt{makeSchemaFromData}.  We can specify this in the following manner:
-
-<<eval=TRUE, echo=TRUE>>=
-
-relationship(sample.tracking, from="samples", to="dna") <- .~sample_id+wave
-
-@
-
-Where '.' is a shortcut that indicates that the primary key for the table should be used.  Now that our schema is complete, we are now ready to populate our database.  First, we create a \texttt{Database} object which simply contains both the schema as well as
-the file path to where the database resides.  We then call the \texttt{populate} method and provide it with our named \texttt{data.frames}.  At this point it is important to note that by default specifying a relationship between two tables in this manner will result in the 'to'
-table being limited to only those values in common between the two tables.  For example specifying the sample\_id+wave relationship between 'samples' and 'dna' will result in the 'dna' table being limited to only those with DNA specimens that have sample IDs and wave values
-in the 'samples' table.  The easiest way to address this issue is to directly specify the relationship columns as oppose to referencing the primary keys of a given table.
+Now that our schema is complete, we are now ready to populate our database.  First, we create a \texttt{Database} object which simply contains both the schema as well as
+the file path to where the database resides.  We then call the \texttt{populate} method and provide it with our named \texttt{data.frames}.  
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -148,9 +140,15 @@ select(sample.tracking.db, .tables=c("clinical","dna"))
 
 select(sample.tracking.db, sample_id:lab_id)
 
-filter(sample.tracking.db, sex == "M" & var_wave_1 > 0)
+head(filter(sample.tracking.db, sex == "M" & var_wave_1 > 0))
 
 filter(sample.tracking.db, sample_id == 97 & var_wave_1 > 0)
+
+@
+
+Whereas the following fails because 'sample\_id' is defined in several tables.
+
+<<eval=TRUE, echo=TRUE>>=
 
 try(filter(sample.tracking.db, sample_id == 97))
 
@@ -173,7 +171,7 @@ filter(sample.tracking.db, clinical.status == 1 & dna.wave==2)
 
 @
 
-The \texttt{poplite} query interface is opt-in meaning that more complex queries can always be carried out directly using the methodology provided in the \texttt{dplyr} package or plain SQL statements after first connecting to the database file using RSQLite.
+The \texttt{poplite} query interface is 'opt-in', meaning that more complex queries can always be carried out directly using the methodology provided in the \texttt{dplyr} package or plain SQL statements after first connecting to the database file using RSQLite.
 Below are three approaches of performing the same query:
 
 <<eval=TRUE, echo=TRUE>>=
@@ -185,13 +183,15 @@ wave.1.samp.pop <- filter(select(sample.tracking.db, .tables=c("samples", "dna")
 src.db <- src_sqlite(dbFile(sample.tracking.db), create = F)
 samp.tab <- tbl(src.db, "samples")
 dna.tab <- tbl(src.db, "dna")
-wave.1.samp.dplyr <- inner_join(filter(samp.tab, wave == 1), dna.tab, by=c("samples_ind", "sample_id"))
+wave.1.samp.dplyr <- inner_join(filter(samp.tab, wave == 1), dna.tab,
+    by=c("sample_id", "wave"))
 
 library(RSQLite)
 
 #RSQLite
 samp.db <- dbConnect(SQLite(), dbFile(sample.tracking.db))
-wave.1.samp.sql <- dbGetQuery(samp.db, 'SELECT * FROM samples JOIN dna USING (samples_ind, sample_id) WHERE wave == 1')
+wave.1.samp.sql <- dbGetQuery(samp.db, 'SELECT * FROM samples JOIN dna
+    USING (sample_id, wave) WHERE wave == 1')
 dbDisconnect(samp.db)
 
 all.equal(as.data.frame(wave.1.samp.pop), wave.1.samp.sql)
@@ -200,11 +200,41 @@ all.equal(as.data.frame(wave.1.samp.dplyr), wave.1.samp.sql)
 
 @
 
-\section{Advanced Usage}
-One of the the most useful features of \texttt{poplite} is that databases can be created from any R object that can be coerced to a \texttt{data.frame} and they can be populated iteratively.  Our example here involves the parsing and loading of a
-variant call format (VCF) file (REFERENCE).  This type of file was devised to encode DNA variations from a reference genome for a given set of samples.  In addition, it can also provide numerical summaries on the confidence that the variant exists
-as well as other summary stats and annotations.  For more details, see the following specifications:(REFERENCE). As parsing is already provided by the \texttt{VariantAnnotation} package in Bioconductor (REFERNCE), we will focus on the population of a database
-using this data.  We will use the example dataset from the \texttt{VariantAnnotation} package and read it into memory as a \texttt{VCF} object as shown in the vignette.
+\subsection{Additional Features}
+
+Instead of directly cross referencing columns as we did for the database above in our relationships (e.g. sample\_id - sample\_id) we can also specify that we instead want to use the 'primary key' of a given table instead of one or more columns.
+Where the primary key is a column of integer values that uniquely identifies each row and by default it was added automatically by \texttt{makeSchemaFromData}.  This approach is commonly used for lookup tables, for instance say we wanted 
+a seperate table for gender and to only maintain an integer value specifying whether a patient was male, female or unknown for the clinical table.  We could do this as follows where '.' is a shortcut that indicates that the primary key for the table should be used: 
+
+<<eval=TRUE, echo=TRUE>>=
+
+gender <- data.frame(sex=unique(clinical$sex), stringsAsFactors=F)
+gend.tbsl <- makeSchemaFromData(gender, "gender")
+
+sample.tracking <- append(gend.tbsl, sample.tracking)
+
+relationship(sample.tracking, from="gender", to="clinical") <- .~sex
+
+sample.tracking.db <- Database(sample.tracking, tempfile())
+populate(sample.tracking.db, dna=new.dna, samples=samples, clinical=clinical, gender=gender)
+
+select(sample.tracking.db, .tables="gender")
+
+head(select(sample.tracking.db, .tables="clinical"))
+
+select(sample.tracking.db, .tables=c("clinical", "gender"))
+
+@
+
+It is important to note that currently specifying a relationship between two tables in this manner will result in the 'to' table being limited to only those values in common between the specified columns in the two tables.  So do not use this approach unless you expect that the two tables are consistent with each
+other.
+
+
+\section{Variant Call Format Database}
+One of the the most useful features of \texttt{poplite} is that databases can be created from any R object that can be coerced to a \texttt{data.frame} and they can be populated iteratively.  This more complex example involves the parsing and loading of a
+variant call format (VCF) file.  This type of file was devised to encode DNA variations from a reference genome for a given set of samples.  In addition, it can also provide numerical summaries on the confidence that the variant exists
+as well as other summary stats and annotations.  For more details, see the following specifications: \url{http://ga4gh.org/#/fileformats-team}. As parsing is already provided by the \texttt{VariantAnnotation} package \citep{Obenchain2014} in Bioconductor \citep{Gentleman2004}, we will focus on the population of a database
+using this data.  We will use the example dataset from the \texttt{VariantAnnotation} package and read it into memory as a \texttt{VCF} object as shown in the \texttt{VariantAnnotation} vignette.
 
 <<eval=TRUE, echo=FALSE>>=
 
@@ -258,7 +288,8 @@ vcf.sc <- poplite::append(vcf.sc, allele.sc)
 @
 
 Finally we can form a table that records the number of alternative alleles for each sample.  Implementation Note: the 'allele\_count' column is very simple due to fact that this example dataset
-only contains one alternative allele for each variant.  Multi-alleleic cases would have to be dealt with differently.
+only contains one alternative allele for each variant.  Multi-alleleic cases would have to be dealt with differently as we would need to be sure that the appropriate allele was counted for each
+genotype.
 
 <<eval=TRUE, echo=TRUE>>=
 
@@ -286,7 +317,7 @@ vcf.sc <- poplite::append(vcf.sc, geno.all.sc)
 
 @
 
-Our relationships can be specified as before.  One wrinkle here is that there is a dependence in the table structures that is more complicated than the sample tracking tables in the 'Basic Usage' section above.  The first
+Our relationships can be specified as before.  One wrinkle here is that there is a dependence in the table structures that is more complicated than in the 'Sample Tracking Database' section above.  The first
 relationship statement below will create a final 'alleles' table with the primary key of 'reference' and the 'alt' column.  As 'sample\_allleles' contains the full column structure of 'alleles' plus the 'sample' and 'allele\_count' columns
 it has to be first joined with reference to retrieve its primary key, then joined with the new 'alleles' table to get 'alleles' primary key with the final table resembling: 'alt\_ind', 'sample' and 'allele\_count'.  Just as '.' on the left hand
 side indicates the primary key of the 'from' table the '.reference' variable indicates the primary key of the reference table.
@@ -340,9 +371,11 @@ all.equal(sub.pop.res, vrange.dta, check.attributes=F)
 
 @
 
-
 <<eval=TRUE>>=
 sessionInfo()
 @
+
+\bibliographystyle{plainnat}
+\bibliography{poplite}
 
 \end{document}
