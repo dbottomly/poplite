@@ -1,4 +1,4 @@
-The `poplite` package
+The `poplite` package [![DOI](https://zenodo.org/badge/doi/10.5281/zenodo.12605.png)](http://dx.doi.org/10.5281/zenodo.12605)
 =========
 
 Installation
