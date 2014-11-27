@@ -782,5 +782,38 @@ test_that("sample tracking example but with direct keys between dna and samples"
     
 })
 
-
+test_that("oligoMask queries that break poplite", {
+  
+    om.schema.obj <- new("TableSchemaList",tab.list=test.schema.2)
+    
+    test.db <- tempfile()
+    
+    temp.con <- dbConnect(SQLite(), test.db)
+    
+    for(i in names(test.db.2))
+    {
+        dbWriteTable(conn=temp.con, name=i, test.db.2[[i]])
+    }
+    
+    dbDisconnect(temp.con)
+    
+    #make a database object
+    
+    test.database.1 <- Database(om.schema.obj, test.db)
+    
+    prob.tab <- as.data.frame(select(test.database.1, .tables="probe_info"))
+    
+    expect_equal(prob.tab, test.db.2$probe_info)
+    
+    select(test.database.1, .tables=tables(test.database.1))
+    
+    select(test.database.1, probe_id, fasta_name, align_status)
+    
+    
+    
+    select(test.database.1, probe_id, fasta_name, align_status, probe_chr, probe_start, probe_end, seqnames, start,
+			end, filter, geno_chr, genotype.allele_num, strain)
+    
+    
+})
 

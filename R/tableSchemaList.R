@@ -919,3 +919,21 @@ setReplaceMethod("relationship", signature("TableSchemaList"), function(obj, val
                     validObject(obj)
                     return(obj)
                  })
+
+
+read.database.tables <- function(db.name, num.rows=10)
+{
+    temp.con <- dbConnect(SQLite(), db.name)
+    
+    tab.names <- dbListTables(temp.con)
+    
+    tab.list <- lapply(tab.names, function(x) dbGetQuery(temp.con, paste0('SELECT * FROM ', x, ' LIMIT ', num.rows)))
+    
+    names(tab.list) <- tab.names
+    
+    tab.list <- tab.list[-which(names(tab.list) == "sqlite_sequence")]
+    
+    dbDisconnect(temp.con)
+    
+    return(tab.list)
+}

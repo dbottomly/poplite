@@ -140,6 +140,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 			
 			if (is.null(back.join))
 			{
+			      browser()
 			    stop("ERROR: Cannot determine join structure")
 			}
 			else
