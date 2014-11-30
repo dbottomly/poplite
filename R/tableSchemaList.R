@@ -45,7 +45,7 @@ get.shortest.query.path <- function(tbsl, start=NULL, finish=NULL, reverse=TRUE,
 {   
     tsl.graph <- tsl.to.graph(tbsl)
     
-    if (missing(finish) || is.null(finish) || is.na(finish))
+    if (missing(finish) || is.null(finish) || all(is.na(finish)))
     {
         finish <- V(tsl.graph)
     }

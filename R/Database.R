@@ -58,48 +58,111 @@ Database <- function(tbsl, db.file)
     return(new("Database", tbsl=tbsl, db.file=db.file))
 }
 
+#where cur.table is the index in use.path which is a character vector of tables and obj is a tableschemalist
+get.join.keys <- function(cur.table, use.path, obj)
+{
+	#maybe it simply needs to be if they share a direct key...
+		    
+	common.key <- intersect(directKeys(schema(obj), use.path[cur.table]), directKeys(schema(obj), use.path[cur.table+1]))
+	
+	if(length(common.key) > 0){
+	 
+	 add.keys <- common.key
+	}else{
+	 add.keys <- NULL
+	}
+	
+	#finally the direct keys from one table to the next
+	for.join <- foreignLocalKeyCols(schema(obj), use.path[cur.table], use.path[cur.table+1])
+	if (is.null(for.join))
+	{
+	 back.join <- foreignLocalKeyCols(schema(obj), use.path[cur.table+1], use.path[cur.table])
+	 
+	 if (is.null(back.join))
+	 {
+		  browser()
+		stop("ERROR: Cannot determine join structure")
+	 }
+	 else
+	 {
+		#the as.character has to do with inner_join and company have different semantics based on named versus unnamed
+		return(as.character(append(back.join, add.keys)))
+	 }
+	}
+	else
+	{
+	 return(as.character(append(for.join, add.keys)))
+	}
+}
+
 #still under construction, need to deal with multiple tables and possibly outer joins and such
 setGeneric("join", def=function(obj, ...) standardGeneric("join"))
 setMethod("join", signature("Database"), function(obj, needed.tables)
 	  {
 	    if (is.character(needed.tables) == F || (all(needed.tables %in% tables(obj))==F && all(names(needed.tables %in% tables(obj))) == F))
 	    {
-		stop("ERROR: needed.tables needs to be a character vector corresponding to table names")
+			stop("ERROR: needed.tables needs to be a character vector corresponding to table names")
 	    }
 	    
 	    if (length(needed.tables) > 1)
 	    {
 		
-		#use the TBSL object to determine how to join the tables and create a temporary table
-		if (length(needed.tables) < length(tables(obj)))
-		{
-		    if (is.null(names(needed.tables)))
-		    {
-			start.node <- get.starting.point(schema(obj), needed.tables)
-		    }else{
-			start.node <- get.starting.point(schema(obj), names(needed.tables))
-		    }
-		    
-		    table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=T)
-		    
-		    valid.path <- sapply(table.path, function(x) all(needed.tables %in% x) || (is.null(names(needed.tables)) == F && all(names(needed.tables) %in% x)))
-		    
-		    if (all(valid.path == F))
-		    {
-			stop("ERROR: Cannot determine how to join tables, query cannot be carried out")
-		    }
-		    
-		    min.valid.path <- which.min(sapply(table.path[valid.path], length))
-		    
-		    use.path <- table.path[valid.path][[min.valid.path]]
-		}else{
-		    if (is.null(names(needed.tables)))
-		    {
-			use.path <- needed.tables 
-		    }else{
-			use.path <- names(needed.tables)
-		    }
-		}
+			#use the TBSL object to determine how to join the tables and create a temporary table
+			if (is.null(names(needed.tables)))
+			{
+				start.node <- get.starting.point(schema(obj), needed.tables)
+			}else{
+				start.node <- get.starting.point(schema(obj), names(needed.tables))
+			}
+			
+			table.path <- get.shortest.query.path(schema(obj), start=start.node, finish=NULL, reverse=F, undirected=T)
+			
+			valid.path <- sapply(table.path, function(x) all(needed.tables %in% x) || (is.null(names(needed.tables)) == F && all(names(needed.tables) %in% x)))
+			
+			ancil.tables <- NULL
+			
+			if (all(valid.path == F))
+			{
+			 #need to add in tables that are not part of the main path put should be added in per use.tables
+			 #also
+				longest.table.path <- table.path[[which.max(sapply(table.path, length))]]
+				lo.tables <- setdiff(needed.tables, longest.table.path)
+				
+				#figure out if all the lo.tables can be joined directly to one or more tables on the longest.table.path
+				
+				temp.ancil.tables <- lapply(lo.tables, function(x)
+								   {
+										temp.sp <- get.shortest.query.path(schema(obj), start=x, finish=longest.table.path, reverse=F, undirected=T)
+										temp.sp.lens <- sapply(temp.sp, length)
+										
+										if (any(temp.sp.lens == 2))
+										{
+											return(sapply(temp.sp[temp.sp.lens == 2], "[", 2))
+										}else{
+											stop(paste("ERROR: Cannot determine how to join table:",x,"query cannot be carried out"))
+										}
+								   })
+				names(temp.ancil.tables) <- lo.tables
+				
+				stacked.ancil <- stack(temp.ancil.tables)
+				ancil.tables <- split(as.character(stacked.ancil$ind), stacked.ancil$values)
+				use.path <- longest.table.path
+			 
+			}else{
+				min.valid.path <- which.min(sapply(table.path[valid.path], length))
+				use.path <- table.path[valid.path][[min.valid.path]]
+				ancil.tables <- NULl
+			}
+			
+			
+		#}else{
+		#    if (is.null(names(needed.tables)))
+		#    {
+		#	use.path <- needed.tables 
+		#    }else{
+		#	use.path <- names(needed.tables)
+		#    }
+		#}
 		
 		#the joining needs to take into account not just the direct keys from one table to the next but also the necessary
 		#keys if one table has already been merged to another as well as any keys that are shared between the tables that
@@ -107,53 +170,24 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		
 		join.cols <- lapply(1:(length(use.path)-1), function(x) {
 		    
-		    #if x and x + 1 share keys with another table(s)
-		    
-		    #x.keys <- foreignLocalKeyCols(schema(obj), use.path[x])
-		    #xp1.keys <- foreignLocalKeyCols(schema(obj), use.path[x+1])
-		    #
-		    #common.key.tables <- intersect(names(x.keys), names(xp1.keys))
-		    #
-		#    if (length(common.key.tables) > 0)
-		#    {
-		#	browser()
-		#	add.keys <- unlist(mapply(function(x,y) intersect(x,y), x.keys[common.key.tables], xp1.keys[common.key.tables]))
-		#	
-		#    }
-		    
-		    #maybe it simply needs to be if they share a direct key...
-		    
-		    common.key <- intersect(directKeys(schema(obj), use.path[x]), directKeys(schema(obj), use.path[x+1]))
-		    
-		    if(length(common.key) > 0){
-			
-			add.keys <- common.key
-		    }else{
-			add.keys <- NULL
-		    }
-		    
-		    #finally the direct keys from one table to the next
-		    for.join <- foreignLocalKeyCols(schema(obj), use.path[x], use.path[x+1])
-		    if (is.null(for.join))
-		    {
-			back.join <- foreignLocalKeyCols(schema(obj), use.path[x+1], use.path[x])
-			
-			if (is.null(back.join))
-			{
-			      browser()
-			    stop("ERROR: Cannot determine join structure")
-			}
-			else
-			{
-			    #the as.character has to do with inner_join and company have different semantics based on named versus unnamed
-			    return(as.character(append(back.join, add.keys)))
-			}
-		    }
-		    else
-		    {
-			return(as.character(append(for.join, add.keys)))
-		    }
+		    get.join.keys(x, use.path, obj)
 		})
+		
+		if (is.null(ancil.tables) == F)
+		{
+			#for each of the ancillary tables, join them in a piecewise fashion to their respective use.path tables
+			ancil.join.cols <- mapply(function(a.tabs, tab){
+				temp.keys <- lapply(a.tabs, function(x)
+					  {
+						get.join.keys(1, c(x, tab), obj)
+					  })
+				names(temp.keys) <- a.tabs
+				return(temp.keys)
+			}, ancil.tables, names(ancil.tables), SIMPLIFY=F)
+			
+		}else{
+			ancil.join.cols <- NULL
+		}
 		
 		#now using dplyr::inner_join(x,y,by=NULL)
 		
@@ -161,50 +195,138 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		
 		if (is.null(names(needed.tables)))
 		{
-		    
 		    all.tab <- tbl(src.db, use.path[1])
-		
+			i <- 1
+		    if (is.null(ancil.tables) == F && use.path[i] %in% names(ancil.tables))
+			{
+				for(j in ancil.tables[[use.path[i]]])
+				{
+					all.tab <- inner_join(all.tab, tbl(src.db,j), by=ancil.join.cols[[use.path[i]]][j])
+				}
+			}
 		    use.path <- use.path[-1]
+		    rm(i)
 		    
 		    for(i in seq_along(use.path))
 		    {
-			all.tab <- inner_join(all.tab, tbl(src.db,use.path[i]), by=join.cols[[i]])
+				if (is.null(ancil.tables) == F && use.path[i] %in% names(ancil.tables))
+				{
+					for(j in ancil.tables[[use.path[i]]])
+					{
+						all.tab <- inner_join(all.tab, tbl(src.db,j), by=ancil.join.cols[[use.path[i]]][j])
+					}
+				}
+				
+				all.tab <- inner_join(all.tab, tbl(src.db,use.path[i]), by=join.cols[[i]])
 		    }
 		    
 		}else{
 		    
-		    all.tab <- tbl(src.db, use.path[1])
+		    .get.select.cols <- function(tab, tab.exp, nec.cols, src.db)
+		    {
+				temp.tab <- tbl(src.db, tab)
+				#try it once to see what columns the evaluation brings back
+				temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
+				
+				#if not all the columns necessary for joining are present, then add them and execute again
+				if (all(nec.cols %in% colnames(temp.tab) ==F))
+				{
+				    diff.cols <- setdiff(nec.cols, colnames(temp.tab))
+				    temp.tab <- tbl(src.db, tab)
+				    temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , ",",tab.exp, ")")))
+				}
+				
+				return(temp.tab)
+		    }
 		    
 		    if (use.path[1] %in% names(needed.tables))
 		    {
-			all.tab <- eval(parse(text=paste("select(all.tab, ", needed.tables[use.path[1]], ")")))
-			if (all(join.cols[[1]] %in% colnames(all.tab) ==F))
-			{
-			    diff.cols <- setdiff(join.cols[[1]], colnames(all.tab))
-			    all.tab <- tbl(src.db, use.path[1])
-			    all.tab <- eval(parse(text=paste("select(all.tab, ", paste(diff.cols, collapse=",") , ",",needed.tables[use.path[1]], ")")))
-			}
+				if (is.null(ancil.tables) == F && use.path[1] %in% names(ancil.tables))
+				{
+					#also make sure that all the necessary columns for joining to the ancilary tables are present
+					all.tab <- .get.select.cols(use.path[1], needed.tables[use.path[1]], c(join.cols[[1]], unlist(ancil.join.cols[[use.path[1]]])), src.db)
+					
+					for(j in ancil.tables[[use.path[1]]])
+					{
+						if (j %in% names(needed.tables))
+						{
+							new.tab <- .get.select.cols(j, needed.tables[j], ancil.join.cols[[use.path[1]]][j], src.db)
+						}else{
+							new.tab <- tbl(src.db, j)
+						}
+						
+						all.tab <- inner_join(all.tab, new.tab, by=ancil.join.cols[[use.path[1]]][j])
+					}
+					
+				}else{
+					all.tab <- .get.select.cols(use.path[1], needed.tables[use.path[1]], join.cols[[1]], src.db) 
+				}
+				
+		    }else{
+				all.tab <- tbl(src.db, use.path[1])
 			
+				if (is.null(ancil.tables) == F && use.path[i] %in% names(ancil.tables))
+				{
+					for(j in ancil.tables[[use.path[1]]])
+					{
+						if (j %in% names(needed.tables))
+						{
+							new.tab <- .get.select.cols(j, needed.tables[j], ancil.join.cols[[use.path[1]]][j], src.db)
+						}else{
+							new.tab <- tbl(src.db, j)
+						}
+						
+						all.tab <- inner_join(all.tab, new.tab, by=ancil.join.cols[[use.path[1]]][j])
+					}
+				}
 		    }
 		    
 		    use.path <- use.path[-1]
 		    
 		    for(i in seq_along(use.path))
 		    {
-			temp.tab <- tbl(src.db,use.path[i])
+				if (use.path[i] %in% names(needed.tables))
+				{
+				    if (is.null(ancil.tables) == F && use.path[i] %in% names(ancil.tables))
+					{
+						new.tab <- .get.select.cols(use.path[i], needed.tables[use.path[i]], c(join.cols[[i]], unlist(ancil.join.cols[[use.path[i]]])), src.db)
+					
+						for(j in ancil.tables[[use.path[i]]])
+						{
+							if (j %in% names(needed.tables))
+							{
+								new.ancil.tab <- .get.select.cols(j, needed.tables[j], ancil.join.cols[[use.path[i]]][j], src.db)
+							}else{
+								new.ancil.tab <- tbl(src.db, j)
+							}
+							
+							new.tab <- inner_join(new.tab, new.ancil, by=ancil.join.cols[[use.path[i]]][j])
+						}
+					}else
+					{
+						new.tab <- .get.select.cols(use.path[i], needed.tables[use.path[i]], join.cols[[i]], src.db) 
+					}
+				}else{
+					
+					new.tab <- tbl(src.db, use.path[i])
+					
+					if (is.null(ancil.tables) == F && use.path[i] %in% names(ancil.tables))
+					{
+						for(j in ancil.tables[[use.path[i]]])
+						{
+							if (j %in% names(needed.tables))
+							{
+								new.ancil.tab <- .get.select.cols(j, needed.tables[j], ancil.join.cols[[use.path[i]]][j], src.db)
+							}else{
+								new.ancil.tab <- tbl(src.db, j)
+							}
+							
+							new.tab <- inner_join(new.tab, new.ancil.tab, by=ancil.join.cols[[use.path[i]]][j])
+						}
+					}
+				}
 			
-			if (use.path[i] %in% names(needed.tables))
-			{
-			    temp.tab <- eval(parse(text=paste("select(temp.tab, ", needed.tables[use.path[i]], ")")))
-			    if (all(join.cols[[i]] %in% colnames(temp.tab) ==F))
-			    {
-				diff.cols <- setdiff(join.cols[[i]], colnames(temp.tab))
-				temp.tab <- tbl(src.db,use.path[i])
-				temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , needed.tables[use.path[i]], ")")))
-			    }
-			}
-			
-			all.tab <- inner_join(all.tab, temp.tab, by=join.cols[[i]])
+				all.tab <- inner_join(all.tab, new.tab, by=join.cols[[i]])
 		    }
 		    
 		    #make sure the final table only includes the requested columns
