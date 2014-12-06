@@ -3,7 +3,7 @@ import(methods)
 importFrom(DBI, dbGetQuery, dbBegin, dbExistsTable, dbCommit, dbConnect, dbDisconnect, make.db.names.default, dbListTables)
 importFrom(RSQLite, dbGetPreparedQuery,SQLite)
 importFrom(lazyeval, lazy_eval, lazy_dots, lazy)
-importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V)
+importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V, adjacent.triangles, minimum.spanning.tree, get.edges, E)
 
 #methods
 export(populate, createTable, mergeStatement, insertStatement, makeSchemaFromData, makeSchemaFromFunction, append, length, 'relationship<-', schema, dbFile,

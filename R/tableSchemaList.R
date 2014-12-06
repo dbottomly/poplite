@@ -29,6 +29,11 @@ get.starting.point <- function(tbsl, use.tables)
     sp.mat[is.infinite(sp.mat)] <- 0
     diag(sp.mat) <- NA
     
+    if (use.tables %in% rownames(sp.mat) == F || use.tables %in% colnames(sp.mat) == F)
+    {
+	browser()
+    }
+    
     sp.mat <- sp.mat[use.tables, use.tables, drop=F]
     
     is.valid <- apply(sp.mat, 1, function(x) all(na.omit(x) > 0))

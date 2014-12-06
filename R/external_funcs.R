@@ -208,11 +208,15 @@ select_.Database <- function(.data, ..., .dots)
 		
 		which.to.use <- sapply(sel.tabs, length) > 0
 		
-		unl.tabs <- unlist(sel.tabs[which.to.use])
+		##bugfix to address multiple columns from same table
+		#unl.tabs <- unlist(sel.tabs[which.to.use])
+		#use.tables <- clean.cols[not.sup.tab][unl.tabs]
+		#names(use.tables) <- names(unl.tabs)
 		
-		use.tables <- clean.cols[not.sup.tab][unl.tabs]
-		
-		names(use.tables) <- names(unl.tabs)
+		unl.tabs <- stack(sel.tabs[which.to.use])
+		use.tables <- sapply(sel.tabs[which.to.use], function(x) paste(clean.cols[not.sup.tab][x], collapse=","))
+		#use.tables <- clean.cols[not.sup.tab][unl.tabs$values]
+		#names(use.tables) <- as.character(unl.tabs$ind)
 		
 	    }else{
 		#otherwise the columns would need to be contiguous between multiple tables

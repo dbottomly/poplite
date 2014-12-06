@@ -805,11 +805,16 @@ test_that("oligoMask queries that break poplite", {
     
     expect_equal(prob.tab, test.db.2$probe_info)
     
+    #should all be from probe_info
+    prob.tab.2 <- as.data.frame(select(test.database.1, probe_id, fasta_name, align_status))
+    
+    expect_equal(prob.tab.2, test.db.2$probe_info[,c("probe_id", "fasta_name", "align_status")])
+    
+    browser()
+    
+    
+    
     select(test.database.1, .tables=tables(test.database.1))
-    
-    select(test.database.1, probe_id, fasta_name, align_status)
-    
-    
     
     select(test.database.1, probe_id, fasta_name, align_status, probe_chr, probe_start, probe_end, seqnames, start,
 			end, filter, geno_chr, genotype.allele_num, strain)
