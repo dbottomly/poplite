@@ -74,7 +74,9 @@ get.join.keys <- function(cur.table, use.path, obj, ancil.tables)
 	
 	if (is.null(ancil.tables) == F && use.path[cur.table] %in% names(ancil.tables))
 	{
-		add.keys <- append(add.keys, get.join.keys(1, c(use.path[cur.table+1], ancil.tables[[use.path[cur.table]]]), obj, NULL))
+		temp.ancil.keys <- lapply(ancil.tables[[use.path[cur.table]]], function(x) get.join.keys(1, c(use.path[cur.table+1], x) , obj, NULL))
+		
+		add.keys <- append(add.keys, unname(unlist(temp.ancil.keys)))
 	}
 	
 	#finally the direct keys from one table to the next
@@ -86,7 +88,6 @@ get.join.keys <- function(cur.table, use.path, obj, ancil.tables)
 	 
 		if (is.null(back.join))
 		{
-			browser()
 		    stop("ERROR: Cannot determine join structure")
 		}
 		else
@@ -128,8 +129,15 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 			
 			if (all(valid.path == F))
 			{
+				
+				
 				tsl.graph <- tsl.to.graph(schema(obj))
 				num.triang<- adjacent.triangles(tsl.graph)
+				
+				#if (any(num.triang > 0))
+				#{
+				#	browser()
+				#}
 				
 				if (all(num.triang > 0) && length(num.triang) == 3)
 				{
@@ -183,14 +191,18 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    get.join.keys(x, use.path, obj, ancil.tables)
 		})
 		
+		
 		if (is.null(ancil.tables) == F)
 		{
 			#for each of the ancillary tables, join them in a piecewise fashion to their respective use.path tables
 			ancil.join.cols <- mapply(function(a.tabs, tab){
-				temp.keys <- lapply(a.tabs, function(x)
-					  {
-						get.join.keys(1, c(x, tab), obj, NULL)
-					  })
+				
+				temp.keys <- lapply(1:length(a.tabs), function(x) get.join.keys(x, c(tab, a.tabs), obj, NULL))
+				
+				#temp.keys <- lapply(a.tabs, function(x)
+				#	  {
+				#		get.join.keys(1, c(x, tab), obj, NULL)
+				#	  })
 				names(temp.keys) <- a.tabs
 				return(temp.keys)
 			}, ancil.tables, names(ancil.tables), SIMPLIFY=F)

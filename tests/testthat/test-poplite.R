@@ -782,9 +782,13 @@ test_that("sample tracking example but with direct keys between dna and samples"
     
 })
 
+#igraph::plot.igraph(poplite:::tsl.to.graph(om.schema.obj))
+
 test_that("oligoMask queries that break poplite", {
   
     om.schema.obj <- new("TableSchemaList",tab.list=test.schema.2)
+    relationship(om.schema.obj, from="allele", to="genotype") <- ref_id+allele_num~ref_id+allele_num
+    
     
     test.db <- tempfile()
     
@@ -810,11 +814,16 @@ test_that("oligoMask queries that break poplite", {
     
     expect_equal(prob.tab.2, test.db.2$probe_info[,c("probe_id", "fasta_name", "align_status")])
     
-    browser()
+    all.tab.1 <- as.data.frame(select(test.database.1, .tables=tables(test.database.1)))
     
+    all.merge <- test.db.2[[1]]
     
+    for(i in names(test.db.2)[-1])
+    {
+        all.merge <- merge(all.merge, test.db.2[[i]], all=F)
+    }
     
-    select(test.database.1, .tables=tables(test.database.1))
+    expect_equal(all.tab.1, all.merge)
     
     select(test.database.1, probe_id, fasta_name, align_status, probe_chr, probe_start, probe_end, seqnames, start,
 			end, filter, geno_chr, genotype.allele_num, strain)
