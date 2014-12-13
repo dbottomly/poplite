@@ -271,7 +271,17 @@ select_.Database <- function(.data, ..., .dots)
 		new.tab.list <- clean.cols[not.sup.tab==F]
 		names(new.tab.list) <- use.tabs
 		
-		use.tables <- append(use.tables, new.tab.list)
+		for(tab.name in names(new.tab.list))
+		{
+		  if(tab.name %in% names(use.tables))
+		  {
+		    use.tables[tab.name] <- paste(use.tables[tab.name], new.tab.list[tab.name], sep=",")
+		  }else{
+		    use.tables <- append(use.tables,new.tab.list[tab.name])
+		  }
+		}
+		
+	      #browser()
 	    }
 	    
 	}else{
@@ -279,7 +289,7 @@ select_.Database <- function(.data, ..., .dots)
 	    names(use.tables) <- sapply(inp.tab.list, "[", 1)
 	}
 	
-	
+	return(eval(parse(text=paste("select(join(.data, use.tables), ", paste(clean.cols, collapse=","), ")"))))
     }
     
     return(join(.data, use.tables))

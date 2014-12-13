@@ -152,7 +152,13 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 					#need to add in tables that are not part of the main path put should be added in per use.tables
 					#also
 					longest.table.path <- table.path[[which.max(sapply(table.path, length))]]
-					lo.tables <- setdiff(needed.tables, longest.table.path)
+					
+					if (is.null(names(needed.tables)))
+					{
+						lo.tables <- setdiff(needed.tables, longest.table.path)
+					}else{
+						lo.tables <- setdiff(names(needed.tables), longest.table.path)
+					}
 					
 					#figure out if all the lo.tables can be joined directly to one or more tables on the longest.table.path
 					
@@ -246,6 +252,8 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    
 		    .get.select.cols <- function(tab, tab.exp, nec.cols, src.db)
 		    {
+				nec.cols <- nec.cols[!is.na(nec.cols)]
+			
 				temp.tab <- tbl(src.db, tab)
 				#try it once to see what columns the evaluation brings back
 				temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
@@ -261,10 +269,12 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 				return(temp.tab)
 		    }
 		    
+		    #There can be tables needed simply to complete the query, not to retrieve columns from
 		    if (use.path[1] %in% names(needed.tables))
 		    {
 				if (is.null(ancil.tables) == F && use.path[1] %in% names(ancil.tables))
 				{
+					
 					#also make sure that all the necessary columns for joining to the ancilary tables are present
 					all.tab <- .get.select.cols(use.path[1], needed.tables[use.path[1]], c(join.cols[[1]], unlist(ancil.join.cols[[use.path[1]]],use.names=F)), src.db)
 					
@@ -287,7 +297,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    }else{
 				all.tab <- tbl(src.db, use.path[1])
 			
-				if (is.null(ancil.tables) == F && use.path[i] %in% names(ancil.tables))
+				if (is.null(ancil.tables) == F && use.path[1] %in% names(ancil.tables))
 				{
 					for(j in ancil.tables[[use.path[1]]])
 					{
@@ -311,7 +321,11 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 				{
 				    if (is.null(ancil.tables) == F && use.path[i] %in% names(ancil.tables))
 					{
-						new.tab <- .get.select.cols(use.path[i], needed.tables[use.path[i]], c(join.cols[[i]], unlist(ancil.join.cols[[use.path[i]]],use.names=F)), src.db)
+						new.tab <- .get.select.cols(use.path[i], needed.tables[use.path[i]],
+											c(join.cols[[i]],
+											ifelse(i == length(use.path), NA, join.cols[[i+1]]),
+											unlist(ancil.join.cols[[use.path[i]]],use.names=F)),
+											src.db)
 					
 						for(j in ancil.tables[[use.path[i]]])
 						{
@@ -326,7 +340,11 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 						}
 					}else
 					{
-						new.tab <- .get.select.cols(use.path[i], needed.tables[use.path[i]], join.cols[[i]], src.db) 
+						new.tab <- .get.select.cols(use.path[i],
+											   needed.tables[use.path[i]],
+											   c(join.cols[[i]],
+												ifelse(i == length(use.path), NA, join.cols[[i+1]])),
+											   src.db) 
 					}
 				}else{
 					

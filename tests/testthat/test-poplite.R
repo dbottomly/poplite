@@ -823,11 +823,14 @@ test_that("oligoMask queries that break poplite", {
         all.merge <- merge(all.merge, test.db.2[[i]], all=F)
     }
     
-    expect_equal(all.tab.1, all.merge)
+    expect_equal(all.tab.1[,names(all.merge)], all.merge)
     
-    select(test.database.1, probe_id, fasta_name, align_status, probe_chr, probe_start, probe_end, seqnames, start,
-			end, filter, geno_chr, genotype.allele_num, strain)
     
+    all.tab.2 <- as.data.frame(select(test.database.1, probe_id, fasta_name, align_status, probe_chr, probe_start, probe_end, seqnames, start,
+			end, filter, geno_chr, genotype.allele_num, strain))
+    
+    expect_equal(all.tab.2, all.merge[,c("probe_id", "fasta_name", "align_status", "probe_chr", "probe_start", "probe_end", "seqnames", "start",
+			"end", "filter", "geno_chr", "allele_num", "strain")])
     
 })
 
