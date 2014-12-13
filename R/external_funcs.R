@@ -208,11 +208,15 @@ select_.Database <- function(.data, ..., .dots)
 		
 		which.to.use <- sapply(sel.tabs, length) > 0
 		
-		unl.tabs <- unlist(sel.tabs[which.to.use])
+		##bugfix to address multiple columns from same table
+		#unl.tabs <- unlist(sel.tabs[which.to.use])
+		#use.tables <- clean.cols[not.sup.tab][unl.tabs]
+		#names(use.tables) <- names(unl.tabs)
 		
-		use.tables <- clean.cols[not.sup.tab][unl.tabs]
-		
-		names(use.tables) <- names(unl.tabs)
+		unl.tabs <- stack(sel.tabs[which.to.use])
+		use.tables <- sapply(sel.tabs[which.to.use], function(x) paste(clean.cols[not.sup.tab][x], collapse=","))
+		#use.tables <- clean.cols[not.sup.tab][unl.tabs$values]
+		#names(use.tables) <- as.character(unl.tabs$ind)
 		
 	    }else{
 		#otherwise the columns would need to be contiguous between multiple tables
@@ -267,7 +271,17 @@ select_.Database <- function(.data, ..., .dots)
 		new.tab.list <- clean.cols[not.sup.tab==F]
 		names(new.tab.list) <- use.tabs
 		
-		use.tables <- append(use.tables, new.tab.list)
+		for(tab.name in names(new.tab.list))
+		{
+		  if(tab.name %in% names(use.tables))
+		  {
+		    use.tables[tab.name] <- paste(use.tables[tab.name], new.tab.list[tab.name], sep=",")
+		  }else{
+		    use.tables <- append(use.tables,new.tab.list[tab.name])
+		  }
+		}
+		
+	      #browser()
 	    }
 	    
 	}else{
@@ -275,7 +289,7 @@ select_.Database <- function(.data, ..., .dots)
 	    names(use.tables) <- sapply(inp.tab.list, "[", 1)
 	}
 	
-	
+	return(eval(parse(text=paste("select(join(.data, use.tables), ", paste(clean.cols, collapse=","), ")"))))
     }
     
     return(join(.data, use.tables))

@@ -782,5 +782,55 @@ test_that("sample tracking example but with direct keys between dna and samples"
     
 })
 
+#igraph::plot.igraph(poplite:::tsl.to.graph(om.schema.obj))
 
+test_that("oligoMask queries that break poplite", {
+  
+    om.schema.obj <- new("TableSchemaList",tab.list=test.schema.2)
+    relationship(om.schema.obj, from="allele", to="genotype") <- ref_id+allele_num~ref_id+allele_num
+    
+    
+    test.db <- tempfile()
+    
+    temp.con <- dbConnect(SQLite(), test.db)
+    
+    for(i in names(test.db.2))
+    {
+        dbWriteTable(conn=temp.con, name=i, test.db.2[[i]])
+    }
+    
+    dbDisconnect(temp.con)
+    
+    #make a database object
+    
+    test.database.1 <- Database(om.schema.obj, test.db)
+    
+    prob.tab <- as.data.frame(select(test.database.1, .tables="probe_info"))
+    
+    expect_equal(prob.tab, test.db.2$probe_info)
+    
+    #should all be from probe_info
+    prob.tab.2 <- as.data.frame(select(test.database.1, probe_id, fasta_name, align_status))
+    
+    expect_equal(prob.tab.2, test.db.2$probe_info[,c("probe_id", "fasta_name", "align_status")])
+    
+    all.tab.1 <- as.data.frame(select(test.database.1, .tables=tables(test.database.1)))
+    
+    all.merge <- test.db.2[[1]]
+    
+    for(i in names(test.db.2)[-1])
+    {
+        all.merge <- merge(all.merge, test.db.2[[i]], all=F)
+    }
+    
+    expect_equal(all.tab.1[,names(all.merge)], all.merge)
+    
+    
+    all.tab.2 <- as.data.frame(select(test.database.1, probe_id, fasta_name, align_status, probe_chr, probe_start, probe_end, seqnames, start,
+			end, filter, geno_chr, genotype.allele_num, strain))
+    
+    expect_equal(all.tab.2, all.merge[,c("probe_id", "fasta_name", "align_status", "probe_chr", "probe_start", "probe_end", "seqnames", "start",
+			"end", "filter", "geno_chr", "allele_num", "strain")])
+    
+})
 
