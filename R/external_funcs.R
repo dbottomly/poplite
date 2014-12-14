@@ -99,7 +99,7 @@ select <- function(.data,..., .tables=NULL)
 {   
     use.dots <- lazy_dots(...)
     
-    if ((missing(.tables) || is.null(.tables) || is.na(.tables))==F && class(.data) == "Database")
+    if ((missing(.tables) || is.null(.tables) || is.na(.tables))==F && inherits(.data, "Database") == TRUE)
     {
 	use.dots <- append(use.dots, list(.tables=.tables))
     }
