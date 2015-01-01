@@ -2,7 +2,7 @@
 filter_.Database <- function(.data, ...,.dots)
 	  {
 	    
-	    use.expr <- .dots
+	    use.expr <- all_dots(.dots, ..., all_named = TRUE)
 	    
 	    if (length(use.expr) != 1)
 	    {
@@ -90,9 +90,9 @@ filter_.Database <- function(.data, ...,.dots)
 		cur.stat <- gsub(paste0(i, "."), "", cur.stat)
 	    }
 	   
-	    use.statement <- paste("filter(my_db_tbl,", cur.stat, ")")
-	    
-	    return(eval(parse(text=use.statement)))
+	    #use.statement <- paste("filter(my_db_tbl,", cur.stat, ")")
+	    #return(eval(parse(text=use.statement)))
+	    return (filter_(my_db_tbl, cur.stat))
     }
 
 select <- function(.data,..., .tables=NULL)
@@ -109,18 +109,21 @@ select <- function(.data,..., .tables=NULL)
 
 select_.Database <- function(.data, ..., .dots)
 {
+    if (missing(.dots) || is.null(.dots) || all(is.na(.dots)))
+    {
+      .dots <- list()
+    }
+  
     #check to see if .tables is part of .dots
-    
     if('.tables' %in% names(.dots))
     {
 	.tables <- .dots$.tables
-	#.tables <- lazy_eval(.dots$.tables)
 	.dots <- .dots[-which(names(.dots) == ".tables")]
     }else{
 	.tables <- NULL
     }
     
-    use.expr <- .dots
+    use.expr <- all_dots(.dots, ..., all_named = TRUE)
     
     if (is.null(.tables) == F)
     {
@@ -280,8 +283,6 @@ select_.Database <- function(.data, ..., .dots)
 		    use.tables <- append(use.tables,new.tab.list[tab.name])
 		  }
 		}
-		
-	      #browser()
 	    }
 	    
 	}else{
@@ -289,7 +290,8 @@ select_.Database <- function(.data, ..., .dots)
 	    names(use.tables) <- sapply(inp.tab.list, "[", 1)
 	}
 	
-	return(eval(parse(text=paste("select(join(.data, use.tables), ", paste(clean.cols, collapse=","), ")"))))
+	#return(eval(parse(text=paste("select(join(.data, use.tables), ", paste(clean.cols, collapse=","), ")"))))
+	return(select_(join(.data, use.tables), .dots=as.list(clean.cols)))
     }
     
     return(join(.data, use.tables))

@@ -253,17 +253,20 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    .get.select.cols <- function(tab, tab.exp, nec.cols, src.db)
 		    {
 				nec.cols <- nec.cols[!is.na(nec.cols)]
-			
+				#browser()
 				temp.tab <- tbl(src.db, tab)
 				#try it once to see what columns the evaluation brings back
-				temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
+				#temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
+				temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(tab.exp, NULL), ","))))
 				
 				#if not all the columns necessary for joining are present, then add them and execute again
 				if (all(nec.cols %in% colnames(temp.tab) ==F))
 				{
 				    diff.cols <- setdiff(nec.cols, colnames(temp.tab))
 				    temp.tab <- tbl(src.db, tab)
-				    temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , ",",tab.exp, ")")))
+				    #temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , ",",tab.exp, ")")))
+				    temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(c(diff.cols, tab.exp), NULL), ","))))
+				    
 				}
 				
 				return(temp.tab)
@@ -370,7 +373,9 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    }
 		    
 		    #make sure the final table only includes the requested columns
-		    all.tab <- eval(parse(text=paste("select(all.tab, ", paste(needed.tables, collapse=","), ")")))
+		    #all.tab <- eval(parse(text=paste("select(all.tab, ", paste(needed.tables, collapse=","), ")")))
+		    
+		    all.tab <- select_(all.tab, .dots=as.list(unlist(strsplit(setNames(needed.tables, NULL), ","))))
 		}
 		
 	    }else{
@@ -380,7 +385,8 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		if (is.null(names(needed.tables))==F)
 		{
 		    all.tab <- tbl(my_db, names(needed.tables))
-		    all.tab <- eval(parse(text=paste("select(all.tab, ", needed.tables, ")")))
+		    #all.tab <- eval(parse(text=paste("select(all.tab, ", needed.tables, ")")))
+		    all.tab <- select_(all.tab, .dots=as.list(unlist(strsplit(setNames(needed.tables, NULL), ","))))
 		    
 		}else{
 		    all.tab <- tbl(my_db, needed.tables)

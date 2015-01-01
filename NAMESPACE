@@ -2,7 +2,7 @@ import(dplyr)
 import(methods)
 importFrom(DBI, dbGetQuery, dbBegin, dbExistsTable, dbCommit, dbConnect, dbDisconnect, make.db.names.default, dbListTables)
 importFrom(RSQLite, dbGetPreparedQuery,SQLite)
-importFrom(lazyeval, lazy_eval, lazy_dots, lazy)
+importFrom(lazyeval, lazy_eval, lazy_dots, lazy, all_dots)
 importFrom(igraph, graph.data.frame, shortest.paths, get.shortest.paths, V, adjacent.triangles, minimum.spanning.tree, get.edges, E)
 
 #methods

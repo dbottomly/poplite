@@ -575,6 +575,11 @@ test_that("Querying with Database objects",
     all.samps <- select(sample.tracking.db, .tables="samples")
     expect_equal(as.data.frame(all.samps), db.samps)
     
+    #the se version:
+    
+    all.samps.se <- select_(sample.tracking.db, .dots=list(.tables="samples"))
+    expect_equal(as.data.frame(all.samps.se), db.samps)
+    
     #try specifying all the tables
     
     all.tab.join <- select(sample.tracking.db, .tables=tables(sample.tracking.db))
@@ -594,6 +599,15 @@ test_that("Querying with Database objects",
     
     expect_equal(atj.dta, merge.dta, check.attributes=F)
     
+    #again the se version
+    
+    all.tab.join.se <- select_(sample.tracking.db, .dots=list(.tables=tables(sample.tracking.db)))
+    
+    atj.dta.se <- convert.factors.to.strings(as.data.frame(all.tab.join.se)[,names(merge.dta)])
+    atj.dta.se <- atj.dta.se[do.call("order", atj.dta.se),]
+    
+    expect_equal(atj.dta.se, merge.dta, check.attributes=F)
+    
     #specifying a subset of the tables
     
     sub.tab.join <- select(sample.tracking.db, .tables=c("samples", "dna"))
@@ -612,9 +626,19 @@ test_that("Querying with Database objects",
     sub.samps <- select(sample.tracking.db, sample_id:dna_ind,.tables="samples")
     expect_equal(as.data.frame(sub.samps), db.samps[,c("sample_id", "did_collect", "dna_ind")])
     
+    #se version
+    
+    sub.samps.se <- select_(sample.tracking.db, "sample_id:dna_ind",.dots=list(.tables="samples"))
+    expect_equal(as.data.frame(sub.samps.se), db.samps[,c("sample_id", "did_collect", "dna_ind")])
+    
     #subsetting again without specifying tables
     sub.samps.nt <- select(sample.tracking.db, sample_id:dna_ind)
     expect_equal(as.data.frame(sub.samps.nt), db.samps[,c("sample_id", "did_collect", "dna_ind")])
+    
+    #se version
+    
+    sub.samps.nt.se <- select_(sample.tracking.db, "sample_id:dna_ind")
+    expect_equal(as.data.frame(sub.samps.nt.se), db.samps[,c("sample_id", "did_collect", "dna_ind")])
     
     #shouldn't work if the subsetting is ambigous
     
@@ -684,6 +708,20 @@ test_that("Querying with Database objects",
     #check against the table itself
     
     expect_equal(samp.1.df, db.samps[db.samps$sample_id == 1,])
+    
+    #standard eval version
+    
+    samp.1.filt.se <- filter_(sample.tracking.db, "samples.sample_id == 1")
+    samp.1.df.se <- as.data.frame(samp.1.filt.se)
+    
+    expect_equal(samp.1.df.se, db.samps[db.samps$sample_id == 1,])
+    
+    #or
+    
+    samp.1.filt.se.2 <- filter_(sample.tracking.db, .dots=list("samples.sample_id == 1"))
+    samp.1.df.se.2 <- as.data.frame(samp.1.filt.se.2)
+    
+    expect_equal(samp.1.df.se.2, db.samps[db.samps$sample_id == 1,])
     
     #also should work like when unambigous:
     
