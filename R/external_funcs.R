@@ -286,8 +286,15 @@ select_.Database <- function(.data, ..., .dots)
 	    }
 	    
 	}else{
-	    use.tables <- clean.cols
-	    names(use.tables) <- sapply(inp.tab.list, "[", 1)
+	    unl.tabs <- stack(inp.tab.list)
+	    unl.tabs$cols <- sapply(strsplit(as.character(unl.tabs$ind), "\\."), "[", 2)
+	    
+	    split.tabs <- split(unl.tabs, unl.tabs$values)
+	    
+	    use.tables <- sapply(split.tabs, function(x) paste(x$cols, collapse=","))
+	  
+	    #use.tables <- clean.cols
+	    #names(use.tables) <- sapply(inp.tab.list, "[", 1)
 	}
 	
 	#return(eval(parse(text=paste("select(join(.data, use.tables), ", paste(clean.cols, collapse=","), ")"))))

@@ -1,6 +1,6 @@
 Package: poplite
-Version: 0.99.13
-Date: 2014-6-17
+Version: 0.99.14
+Date: 2015-01-02
 Title: Tools for Simplifying the Population and Querying of SQLite
         Databases
 Authors@R: c(person("Daniel", "Bottomly", role=c("cre", "aut"), email="bottomly@ohsu.edu"),

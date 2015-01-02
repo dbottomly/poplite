@@ -374,7 +374,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    
 		    #make sure the final table only includes the requested columns
 		    #all.tab <- eval(parse(text=paste("select(all.tab, ", paste(needed.tables, collapse=","), ")")))
-		    
+		    #browser()
 		    all.tab <- select_(all.tab, .dots=as.list(unlist(strsplit(setNames(needed.tables, NULL), ","))))
 		}
 		
