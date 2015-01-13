@@ -872,7 +872,9 @@ test_that("oligoMask queries that break poplite", {
     
     
     sel.tab <- as.data.frame(select_(test.database.1, "probe_info.probe_id", "reference.ref_id", "reference.filter", "probe_info.align_status"))
-    browser()
+    
     expect_equal(sel.tab, all.merge[,c("probe_id", "ref_id", "filter", "align_status")])
+    
+    
 })
 
