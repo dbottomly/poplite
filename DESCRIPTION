@@ -1,5 +1,5 @@
 Package: poplite
-Version: 0.99.15
+Version: 0.99.16
 Date: 2015-01-02
 Title: Tools for Simplifying the Population and Querying of SQLite
         Databases
@@ -11,5 +11,6 @@ Imports: DBI, igraph, lazyeval, RSQLite (>= 1.0.0)
 Suggests: testthat, Lahman, VariantAnnotation
 Description: Provides objects and accompanying methods which facilitates populating and querying SQLite databases.    
 License: GPL-3
+URL: https://github.com/dbottomly/poplite
 Collate: tableSchemaList.R Database.R external_funcs.R
 Packaged: 2014-11-05 19:05:47 UTC; bottomly
