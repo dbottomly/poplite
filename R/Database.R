@@ -1,4 +1,4 @@
-setClass(Class="Database", representation=list(tbsl="TableSchemaList", db.file="character"))
+setClass(Class="Database", representation=list(tbsl="TableSchemaList", db.file="character", connection="SQLiteConnection"))
 
 setMethod("show", signature("Database"), function(object)
 	  {
@@ -40,23 +40,37 @@ Database <- function(tbsl, db.file)
 {
     if (class(tbsl) != "TableSchemaList")
     {
-	stop("ERROR: tbsl needs to be an instance of class TableSchemaList")
+	    stop("ERROR: tbsl needs to be an instance of class TableSchemaList")
     }
     
     if ((is.character(db.file) && length(db.file) == 1)==F)
     {
-	stop("ERROR: db.file needs to be a single path to a file")
+	    stop("ERROR: db.file needs to be a single path to a file")
     }
     
-    #just want to make sure there is an available DB file...somewhat wasteful
-    if (file.exists(db.file) == F)
-    {
-	temp.con <- dbConnect(SQLite(), db.file)
-	dbDisconnect(temp.con)
-    }
-    
-    return(new("Database", tbsl=tbsl, db.file=db.file))
+    return(new("Database", tbsl=tbsl, db.file=db.file, connection=new("SQLiteConnection")))
 }
+
+#S3 methods
+open.Database <- function(con,...){
+  
+  con@connection <- dbConnect(SQLite(), dbFile(con))
+  
+  invisible(con)
+}
+
+
+close.Database <- function(con,...){
+  
+  dbDisconnect(con@connection)
+  
+}
+
+setGeneric("isOpen")
+
+setMethod("isOpen", signature("Database"), function(con, rw=""){
+  return(dbIsValid(con@connection))
+})
 
 #where cur.table is the index in use.path which is a character vector of tables and obj is a tableschemalist
 get.join.keys <- function(cur.table, use.path, obj, ancil.tables)
@@ -401,11 +415,27 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 setGeneric("populate", def=function(obj, ...) standardGeneric("populate"))
 setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL, should.debug=FALSE)
 	  {
-	    db.con <- dbConnect(SQLite(), dbFile(obj))
+	    
+      keep.open <- FALSE
+  
+	    if (isOpen(obj)){
+	      
+	      keep.open <- TRUE
+	      
+	    }else{
+	      obj <- open(obj)
+	    }
+      
+      db.con <- obj@connection
 	    
 	    .populate(schema(obj), db.con, ins.vals=list(...), use.tables=use.tables, should.debug=should.debug)
 	    
-	    invisible(dbDisconnect(db.con))
+	    if (keep.open == FALSE){
+	      dbDisconnect(db.con)
+	    }
+	    
+	    invisible(T)
+	    
 	  })
 
 .populate <- function(obj, db.con,ins.vals=NULL, use.tables=NULL, should.debug=FALSE)
