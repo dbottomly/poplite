@@ -822,36 +822,43 @@ setReplaceMethod("constraint", signature("TableSchemaList"), function(obj, table
 		    
 		    if (missing(table.name) || is.null(table.name) || length(table.name) != 1  || is.na(table.name) || all(table.name %in% tables(obj))==F)
 		    {
-			stop("ERROR: please supply a single valid table for 'table.name'")
+			    stop("ERROR: please supply a single valid table for 'table.name'")
 		    }
 		    
 		    if (missing(constr.name) || is.null(constr.name))
 		    {
-			constr.name <- paste(table.name, "idx", sep="_")
+			    constr.name <- paste(table.name, "idx", sep="_")
 		    }
 		    
 		    if (length(should.ignore) != 1 || is.logical(should.ignore) == F)
 		    {
-			stop("ERROR: should.ignore should be a single logial value")
+			    stop("ERROR: should.ignore should be a single logial value")
 		    }
 		    
 		    if (is.null(value))
 		    {
 			
-			obj@tab.list[[table.name]]$db.constr <- ""
+			    obj@tab.list[[table.name]]$db.constr <- ""
 			
 		    }else{
-			cur.rhs <- .get.model.side(value, "right", num.components=2)
-		    
-			cur.rhs <- .resolve.rhs.fk(obj, cur.rhs, table.name)
-			
-			obj@tab.list[[table.name]]$db.constr <- paste("CONSTRAINT",constr.name,"UNIQUE (",paste(cur.rhs, collapse=","),")")
+			    cur.rhs <- .get.model.side(value, "right", num.components=2)
+		      
+			    if (length(cur.rhs) == 1 && cur.rhs == "."){
+			      #add in every column except for the primary key
+			      cur.rhs <- obj@tab.list[[table.name]]$db.cols[obj@tab.list[[table.name]]$db.schema != "INTEGER PRIMARY KEY AUTOINCREMENT"]
+			      
+			    }else{
+			      cur.rhs <- .resolve.rhs.fk(obj, cur.rhs, table.name)
+			    }
+			    
+			    obj@tab.list[[table.name]]$db.constr <- paste("CONSTRAINT",constr.name,"UNIQUE (",paste(cur.rhs, collapse=","),")")
 		    }
 		    
-                    obj@tab.list[[table.name]]$should.ignore <- should.ignore
+        obj@tab.list[[table.name]]$should.ignore <- should.ignore
 		    
 		    validObject(obj)
-                    return(obj)
+        
+		    return(obj)
 		    
 		 })
 
