@@ -439,41 +439,46 @@ setMethod("bindDataFunction", signature("TableSchemaList"), function(obj, table.
         {
             table.mode <- match.arg(mode)
             
-	    cur.func <- return.element(subset(obj, table.name), "dta.func")[[1]]
-	    
-	    cur.forms <- formals(cur.func)
-	    
-	    if (all(names(cur.forms) %in% names(bind.vals)) == F)
-	    {
-		stop(paste("ERROR: Cannot find variables with names:", paste(names(cur.forms), collapse=",")))
-	    }
-	    
-            vcf.dta <- do.call(cur.func, bind.vals[names(cur.forms)])
-            
-            cur.cols <- colNames(obj, table.name, mode=table.mode)
-            cur.schema <- colSchema(obj, table.name, mode=table.mode)
-            
-            #don't need to supply columns which are autoincremented, they will be automatically added to the data.frame
-            auto.col <- cur.cols[cur.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"]
-            #stopifnot(length(auto.col) == 1)
-            
-            diff.cols <- setdiff(cur.cols, colnames(vcf.dta))
-            
-            if (length(diff.cols) == 0)
-            {
-                return(vcf.dta[,cur.cols])
-            }
-            else if (length(auto.col) == 1 && length(diff.cols) == 1 && diff.cols == auto.col)
-            {
-                temp.vcf.dta <- cbind(vcf.dta, NA_integer_)
-                names(temp.vcf.dta) <- c(names(vcf.dta), auto.col)
-                return(temp.vcf.dta[,cur.cols])
-            }
-            else
-            {
-                nf.cols <- setdiff(cur.cols, colnames(vcf.dta))
-                stop(paste("ERROR: Cannot find column(s)", paste(nf.cols, collapse=",")))
-            }
+      	    cur.func <- return.element(subset(obj, table.name), "dta.func")[[1]]
+      	    
+      	    cur.forms <- formals(cur.func)
+      	    
+      	    if (all(names(cur.forms) %in% names(bind.vals)) == F)
+      	    {
+      		    stop(paste("ERROR: Cannot find variables with names:", paste(names(cur.forms), collapse=",")))
+      	    }
+      	    
+                  vcf.dta <- do.call(cur.func, bind.vals[names(cur.forms)])
+                  
+                  cur.cols <- colNames(obj, table.name, mode=table.mode)
+                  cur.schema <- colSchema(obj, table.name, mode=table.mode)
+                  
+                  #don't need to supply columns which are autoincremented, they will be automatically added to the data.frame
+                  auto.col <- cur.cols[cur.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"]
+                  #stopifnot(length(auto.col) == 1)
+                  
+                  diff.cols <- setdiff(cur.cols, colnames(vcf.dta))
+                  
+                  if (length(diff.cols) == 0)
+                  {
+                      return(vcf.dta[,cur.cols])
+                  }
+                  else if (length(auto.col) == 1 && length(diff.cols) == 1 && diff.cols == auto.col)
+                  {
+                      if (nrow(vcf.dta) > 0){
+                        temp.vcf.dta <- cbind(vcf.dta, NA_integer_)
+                      }else{
+                        temp.vcf.dta <- cbind(vcf.dta, integer(0))
+                      }
+                      
+                      names(temp.vcf.dta) <- c(names(vcf.dta), auto.col)
+                      return(temp.vcf.dta[,cur.cols])
+                  }
+                  else
+                  {
+                      nf.cols <- setdiff(cur.cols, colnames(vcf.dta))
+                      stop(paste("ERROR: Cannot find column(s)", paste(nf.cols, collapse=",")))
+                  }
             
         })
 

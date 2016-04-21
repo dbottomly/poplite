@@ -490,10 +490,14 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
             if (should.debug) message("Adding to temporary table")
             if (should.debug) message(insertStatement(db.schema, i, mode="merge"))
             #first add the data to temporary database
-	   
-	    dbBegin(db.con)
-            dbGetPreparedQuery(db.con, insertStatement(db.schema, i, mode="merge"), bind.data = bindDataFunction(db.schema, i, ins.vals, mode="merge"))
-            dbCommit(db.con)
+	          
+            bind.data <- bindDataFunction(db.schema, i, ins.vals, mode="merge")
+            
+            if (nrow(bind.data) > 0){
+              dbBegin(db.con)
+              dbGetPreparedQuery(db.con, insertStatement(db.schema, i, mode="merge"), bind.data = bind.data)
+              dbCommit(db.con)
+            }
             
             #merge from temporary into main table
             if (should.debug) message("Merging with existing table(s)")
@@ -509,9 +513,14 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
             if (should.debug) message("Adding to database table")
             if (should.debug) message(insertStatement(db.schema, i))
             #add the data to database
-            dbBegin(db.con)
-            dbGetPreparedQuery(db.con, insertStatement(db.schema, i), bind.data = bindDataFunction(db.schema, i, ins.vals))
-            dbCommit(db.con)
+            
+            bind.data <- bindDataFunction(db.schema, i, ins.vals)
+            if (nrow(bind.data) > 0){
+              dbBegin(db.con)
+              dbGetPreparedQuery(db.con, insertStatement(db.schema, i), bind.data = bind.data)
+              dbCommit(db.con)
+            
+            }
         }
         
     }

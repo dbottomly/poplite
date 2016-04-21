@@ -450,6 +450,11 @@ test_that("Database population",{
     
     do.call(populate, append(list(baseball.db), ins.vals))
     
+    #attempt to also add in an empty data.frame, which should simply not add anything to the db
+    empty.df <- TeamsFranchises[F,]
+    
+    populate(baseball.db, team_franch=empty.df, use.tables="team_franch")
+    
     #read back in each of the tables and make sure they are consistent with in memory data.frames
     
     test.con <- dbConnect(SQLite(), dbFile(baseball.db))
