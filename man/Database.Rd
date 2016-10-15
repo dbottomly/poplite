@@ -11,6 +11,7 @@
 \alias{schema}
 \alias{schema,Database-method}
 \alias{tables,Database-method}
+\alias{isOpen,Database-method}
 
 \title{Class \code{"Database"}}
 \description{
@@ -25,10 +26,12 @@ Objects can be created by calls of the form \code{Database(tbsl, db.file)}.
   \describe{
     \item{\code{tbsl}:}{Object of class \code{"TableSchemaList"} representing the current or desired database schema}
     \item{\code{db.file}:}{Single file path to the desired location of the database}
+    \item{\code{connection}:}{An object of class \code{"SQLiteConnection"}}
   }
 }
 \section{Methods}{
   \describe{
+    \item{isOpen}{\code{signature(obj = "Database")}: Return a logical value indicating if the database connection is open}
     \item{columns}{\code{signature(obj = "Database")}: Returns a list of the database table columns indexed by table name}
     \item{dbFile}{\code{signature(obj = "Database")}: Returns the file path associated with the database}
     \item{populate}{\code{signature(obj = "Database")}, \dots, use.tables = NULL, should.debug = FALSE: Populate an SQLite database using the schema and location from the \code{Database} object and the data to be inserted as specified in the  \code{dta.func} element of the \code{TableSchemaList}.  The \code{use.tables} argument can be used to limit the tables populated.  The \code{should.debug} argument outputs more verbose messages regarding the SQL queries.}

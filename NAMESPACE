@@ -1,5 +1,7 @@
 import(dplyr)
 import(methods)
+importFrom(utils, stack)
+importFrom(stats, na.omit, setNames)
 importFrom(DBI, dbGetQuery, dbBegin, dbExistsTable, dbIsValid, dbCommit, dbConnect, dbDisconnect, make.db.names.default, dbListTables)
 importFrom(RSQLite, dbGetPreparedQuery,SQLite)
 importFrom(lazyeval, lazy_eval, lazy_dots, lazy, all_dots)

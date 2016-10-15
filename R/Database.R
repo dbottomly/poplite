@@ -116,6 +116,28 @@ get.join.keys <- function(cur.table, use.path, obj, ancil.tables)
 	}
 }
 
+.get.select.cols <- function(tab, tab.exp, nec.cols, src.db)
+{
+  nec.cols <- nec.cols[!is.na(nec.cols)]
+  #browser()
+  temp.tab <- tbl(src.db, tab)
+  #try it once to see what columns the evaluation brings back
+  #temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
+  temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(tab.exp, NULL), ","))))
+  
+  #if not all the columns necessary for joining are present, then add them and execute again
+  if (all(nec.cols %in% colnames(temp.tab) ==F))
+  {
+    diff.cols <- setdiff(nec.cols, colnames(temp.tab))
+    temp.tab <- tbl(src.db, tab)
+    #temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , ",",tab.exp, ")")))
+    temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(c(diff.cols, tab.exp), NULL), ","))))
+    
+  }
+  
+  return(temp.tab)
+}
+
 #still under construction, need to deal with multiple tables and possibly outer joins and such
 setGeneric("join", def=function(obj, ...) standardGeneric("join"))
 setMethod("join", signature("Database"), function(obj, needed.tables)
@@ -264,28 +286,6 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    
 		}else{
 		    
-		    .get.select.cols <- function(tab, tab.exp, nec.cols, src.db)
-		    {
-				nec.cols <- nec.cols[!is.na(nec.cols)]
-				#browser()
-				temp.tab <- tbl(src.db, tab)
-				#try it once to see what columns the evaluation brings back
-				#temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
-				temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(tab.exp, NULL), ","))))
-				
-				#if not all the columns necessary for joining are present, then add them and execute again
-				if (all(nec.cols %in% colnames(temp.tab) ==F))
-				{
-				    diff.cols <- setdiff(nec.cols, colnames(temp.tab))
-				    temp.tab <- tbl(src.db, tab)
-				    #temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , ",",tab.exp, ")")))
-				    temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(c(diff.cols, tab.exp), NULL), ","))))
-				    
-				}
-				
-				return(temp.tab)
-		    }
-		    
 		    #There can be tables needed simply to complete the query, not to retrieve columns from
 		    if (use.path[1] %in% names(needed.tables))
 		    {
@@ -353,7 +353,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 								new.ancil.tab <- tbl(src.db, j)
 							}
 							
-							new.tab <- inner_join(new.tab, new.ancil, by=ancil.join.cols[[use.path[i]]][[j]])
+							new.tab <- inner_join(new.tab, new.ancil.tab, by=ancil.join.cols[[use.path[i]]][[j]])
 						}
 					}else
 					{
