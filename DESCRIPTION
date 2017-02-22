@@ -1,12 +1,12 @@
 Package: poplite
 Version: 0.99.17.3
-Date: 2015-01-02
+Date: 2017-02-022
 Title: Tools for Simplifying the Population and Querying of SQLite
         Databases
 Authors@R: c(person("Daniel", "Bottomly", role=c("cre", "aut"), email="bottomly@ohsu.edu"),
 	person("Shannon", "McWeeney", role="aut"),
 	person("Beth", "Wilmot", role="aut"))
-Depends: R (>= 3.1), methods, dplyr (>= 0.3.0.2), DBI (>= 0.5-12)
+Depends: R (>= 3.1), methods, dplyr (>= 0.3.0.2), DBI (>= 0.5-1)
 Imports: igraph, lazyeval, RSQLite (>= 1.0.9014)
 Suggests: testthat, Lahman, VariantAnnotation
 Description: Provides objects and accompanying methods which facilitates populating and querying SQLite databases.    
