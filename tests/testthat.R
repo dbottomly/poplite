@@ -1,6 +1,7 @@
 library(testthat)
 library(Lahman)
 library(RSQLite)
+library(poplite)
 
 test.db.1 <- function()
 {
@@ -111,4 +112,4 @@ test.schema.2 <- list(probe_info=list(db.cols=c("probe_ind", "fasta_name", "prob
 
 
 
-test_check("poplite")
+test_dir("testthat")

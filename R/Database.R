@@ -339,7 +339,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 								new.ancil.tab <- tbl(src.db, j)
 							}
 							
-							new.tab <- inner_join(new.tab, new.ancil, by=ancil.join.cols[[use.path[i]]][[j]])
+							new.tab <- inner_join(new.tab, new.ancil.tab, by=ancil.join.cols[[use.path[i]]][[j]])
 						}
 					}else
 					{
