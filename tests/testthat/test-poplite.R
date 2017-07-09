@@ -249,7 +249,7 @@ test_that("createTable",
                 
                 prag.tab.name <- ifelse(j=="merge", paste0(i, "_temp"), i)
                 
-                expect_true(is.null(dbGetQuery(db.con, createTable(tbsl, table.name=i, mode=j))))
+                expect_true(dbExecute(db.con, createTable(tbsl, table.name=i, mode=j)) == 0)
                 tab.prag <- dbGetQuery(db.con, paste("pragma table_info(",prag.tab.name,")"))
                 sub.prag <- tab.prag[,c("name", "type", "pk")]
                 
@@ -327,7 +327,8 @@ test_that("insertStatement", {
             else
             {
                 #first create the tables
-                expect_true(is.null(dbGetQuery(db.con, createTable(tbsl, table.name=i, mode=j))))
+                
+                dbExecute(db.con, createTable(tbsl, table.name=i, mode=j))
                 
                 prag.tab.name <- ifelse(j=="merge", paste0(i, "_temp"), i)
                 tab.prag <- dbGetQuery(db.con, paste("pragma table_info(",prag.tab.name,")"))
@@ -345,10 +346,10 @@ test_that("insertStatement", {
                 }
                 
                 #load into the database
-                
-                dbBeginTransaction(db.con)
-                expect_true(is.null(dbGetPreparedQuery(db.con, insertStatement(tbsl, i, mode=j), bind.data = ins.dta)))
-                dbCommit(db.con)
+                res <- dbSendStatement(db.con, insertStatement(tbsl, i, mode=j))
+                dbBind(res, ins.dta)
+                expect_true(dbGetRowsAffected(res) == nrow(ins.dta))
+                dbClearResult(res)
                 
                 #check whether it respects should.ignore
                 
@@ -449,6 +450,11 @@ test_that("Database population",{
     #populate the entire database
     
     do.call(populate, append(list(baseball.db), ins.vals))
+    
+    #attempt to also add in an empty data.frame, which should simply not add anything to the db
+    empty.df <- TeamsFranchises[F,]
+    
+    populate(baseball.db, team_franch=empty.df, use.tables="team_franch")
     
     #read back in each of the tables and make sure they are consistent with in memory data.frames
     

@@ -1,4 +1,4 @@
-setClass(Class="Database", representation=list(tbsl="TableSchemaList", db.file="character"))
+setClass(Class="Database", representation=list(tbsl="TableSchemaList", db.file="character", connection="SQLiteConnection"))
 
 setMethod("show", signature("Database"), function(object)
 	  {
@@ -40,23 +40,37 @@ Database <- function(tbsl, db.file)
 {
     if (class(tbsl) != "TableSchemaList")
     {
-	stop("ERROR: tbsl needs to be an instance of class TableSchemaList")
+	    stop("ERROR: tbsl needs to be an instance of class TableSchemaList")
     }
     
     if ((is.character(db.file) && length(db.file) == 1)==F)
     {
-	stop("ERROR: db.file needs to be a single path to a file")
+	    stop("ERROR: db.file needs to be a single path to a file")
     }
     
-    #just want to make sure there is an available DB file...somewhat wasteful
-    if (file.exists(db.file) == F)
-    {
-	temp.con <- dbConnect(SQLite(), db.file)
-	dbDisconnect(temp.con)
-    }
-    
-    return(new("Database", tbsl=tbsl, db.file=db.file))
+    return(new("Database", tbsl=tbsl, db.file=db.file, connection=new("SQLiteConnection")))
 }
+
+#S3 methods
+open.Database <- function(con,...){
+  
+  con@connection <- dbConnect(SQLite(), dbFile(con))
+  
+  invisible(con)
+}
+
+
+close.Database <- function(con,...){
+  
+  dbDisconnect(con@connection)
+  
+}
+
+setGeneric("isOpen")
+
+setMethod("isOpen", signature("Database"), function(con, rw=""){
+  return(tryCatch(dbIsValid(con@connection), error=function(x) FALSE))
+})
 
 #where cur.table is the index in use.path which is a character vector of tables and obj is a tableschemalist
 get.join.keys <- function(cur.table, use.path, obj, ancil.tables)
@@ -100,6 +114,28 @@ get.join.keys <- function(cur.table, use.path, obj, ancil.tables)
 	{
 		return(unique(as.character(append(for.join, add.keys))))
 	}
+}
+
+.get.select.cols <- function(tab, tab.exp, nec.cols, src.db)
+{
+  nec.cols <- nec.cols[!is.na(nec.cols)]
+  #browser()
+  temp.tab <- tbl(src.db, tab)
+  #try it once to see what columns the evaluation brings back
+  #temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
+  temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(tab.exp, NULL), ","))))
+  
+  #if not all the columns necessary for joining are present, then add them and execute again
+  if (all(nec.cols %in% colnames(temp.tab) ==F))
+  {
+    diff.cols <- setdiff(nec.cols, colnames(temp.tab))
+    temp.tab <- tbl(src.db, tab)
+    #temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , ",",tab.exp, ")")))
+    temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(c(diff.cols, tab.exp), NULL), ","))))
+    
+  }
+  
+  return(temp.tab)
 }
 
 #still under construction, need to deal with multiple tables and possibly outer joins and such
@@ -250,28 +286,6 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		    
 		}else{
 		    
-		    .get.select.cols <- function(tab, tab.exp, nec.cols, src.db)
-		    {
-				nec.cols <- nec.cols[!is.na(nec.cols)]
-				#browser()
-				temp.tab <- tbl(src.db, tab)
-				#try it once to see what columns the evaluation brings back
-				#temp.tab <- eval(parse(text=paste("select(temp.tab, ", tab.exp , ")")))
-				temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(tab.exp, NULL), ","))))
-				
-				#if not all the columns necessary for joining are present, then add them and execute again
-				if (all(nec.cols %in% colnames(temp.tab) ==F))
-				{
-				    diff.cols <- setdiff(nec.cols, colnames(temp.tab))
-				    temp.tab <- tbl(src.db, tab)
-				    #temp.tab <- eval(parse(text=paste("select(temp.tab, ", paste(diff.cols, collapse=",") , ",",tab.exp, ")")))
-				    temp.tab <- select_(temp.tab, .dots=as.list(unlist(strsplit(setNames(c(diff.cols, tab.exp), NULL), ","))))
-				    
-				}
-				
-				return(temp.tab)
-		    }
-		    
 		    #There can be tables needed simply to complete the query, not to retrieve columns from
 		    if (use.path[1] %in% names(needed.tables))
 		    {
@@ -401,11 +415,27 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 setGeneric("populate", def=function(obj, ...) standardGeneric("populate"))
 setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL, should.debug=FALSE)
 	  {
-	    db.con <- dbConnect(SQLite(), dbFile(obj))
+	    
+      keep.open <- FALSE
+  
+	    if (isOpen(obj)){
+	      
+	      keep.open <- TRUE
+	      
+	    }else{
+	      obj <- open(obj)
+	    }
+      
+      db.con <- obj@connection
 	    
 	    .populate(schema(obj), db.con, ins.vals=list(...), use.tables=use.tables, should.debug=should.debug)
 	    
-	    invisible(dbDisconnect(db.con))
+	    if (keep.open == FALSE){
+	      dbDisconnect(db.con)
+	    }
+	    
+	    invisible(T)
+	    
 	  })
 
 .populate <- function(obj, db.con,ins.vals=NULL, use.tables=NULL, should.debug=FALSE)
@@ -460,10 +490,14 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
             if (should.debug) message("Adding to temporary table")
             if (should.debug) message(insertStatement(db.schema, i, mode="merge"))
             #first add the data to temporary database
-	   
-	    dbBegin(db.con)
-            dbGetPreparedQuery(db.con, insertStatement(db.schema, i, mode="merge"), bind.data = bindDataFunction(db.schema, i, ins.vals, mode="merge"))
-            dbCommit(db.con)
+	          
+            bind.data <- bindDataFunction(db.schema, i, ins.vals, mode="merge")
+            
+            if (nrow(bind.data) > 0){
+              dbBegin(db.con)
+              dbGetPreparedQuery(db.con, insertStatement(db.schema, i, mode="merge"), bind.data = bind.data)
+              dbCommit(db.con)
+            }
             
             #merge from temporary into main table
             if (should.debug) message("Merging with existing table(s)")
@@ -479,9 +513,14 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
             if (should.debug) message("Adding to database table")
             if (should.debug) message(insertStatement(db.schema, i))
             #add the data to database
-            dbBegin(db.con)
-            dbGetPreparedQuery(db.con, insertStatement(db.schema, i), bind.data = bindDataFunction(db.schema, i, ins.vals))
-            dbCommit(db.con)
+            
+            bind.data <- bindDataFunction(db.schema, i, ins.vals)
+            if (nrow(bind.data) > 0){
+              dbBegin(db.con)
+              dbGetPreparedQuery(db.con, insertStatement(db.schema, i), bind.data = bind.data)
+              dbCommit(db.con)
+            
+            }
         }
         
     }

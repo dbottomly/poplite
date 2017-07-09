@@ -439,41 +439,46 @@ setMethod("bindDataFunction", signature("TableSchemaList"), function(obj, table.
         {
             table.mode <- match.arg(mode)
             
-	    cur.func <- return.element(subset(obj, table.name), "dta.func")[[1]]
-	    
-	    cur.forms <- formals(cur.func)
-	    
-	    if (all(names(cur.forms) %in% names(bind.vals)) == F)
-	    {
-		stop(paste("ERROR: Cannot find variables with names:", paste(names(cur.forms), collapse=",")))
-	    }
-	    
-            vcf.dta <- do.call(cur.func, bind.vals[names(cur.forms)])
-            
-            cur.cols <- colNames(obj, table.name, mode=table.mode)
-            cur.schema <- colSchema(obj, table.name, mode=table.mode)
-            
-            #don't need to supply columns which are autoincremented, they will be automatically added to the data.frame
-            auto.col <- cur.cols[cur.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"]
-            #stopifnot(length(auto.col) == 1)
-            
-            diff.cols <- setdiff(cur.cols, colnames(vcf.dta))
-            
-            if (length(diff.cols) == 0)
-            {
-                return(vcf.dta[,cur.cols])
-            }
-            else if (length(auto.col) == 1 && length(diff.cols) == 1 && diff.cols == auto.col)
-            {
-                temp.vcf.dta <- cbind(vcf.dta, NA_integer_)
-                names(temp.vcf.dta) <- c(names(vcf.dta), auto.col)
-                return(temp.vcf.dta[,cur.cols])
-            }
-            else
-            {
-                nf.cols <- setdiff(cur.cols, colnames(vcf.dta))
-                stop(paste("ERROR: Cannot find column(s)", paste(nf.cols, collapse=",")))
-            }
+      	    cur.func <- return.element(subset(obj, table.name), "dta.func")[[1]]
+      	    
+      	    cur.forms <- formals(cur.func)
+      	    
+      	    if (all(names(cur.forms) %in% names(bind.vals)) == F)
+      	    {
+      		    stop(paste("ERROR: Cannot find variables with names:", paste(names(cur.forms), collapse=",")))
+      	    }
+      	    
+                  vcf.dta <- do.call(cur.func, bind.vals[names(cur.forms)])
+                  
+                  cur.cols <- colNames(obj, table.name, mode=table.mode)
+                  cur.schema <- colSchema(obj, table.name, mode=table.mode)
+                  
+                  #don't need to supply columns which are autoincremented, they will be automatically added to the data.frame
+                  auto.col <- cur.cols[cur.schema == "INTEGER PRIMARY KEY AUTOINCREMENT"]
+                  #stopifnot(length(auto.col) == 1)
+                  
+                  diff.cols <- setdiff(cur.cols, colnames(vcf.dta))
+                  
+                  if (length(diff.cols) == 0)
+                  {
+                      return(vcf.dta[,cur.cols])
+                  }
+                  else if (length(auto.col) == 1 && length(diff.cols) == 1 && diff.cols == auto.col)
+                  {
+                      if (nrow(vcf.dta) > 0){
+                        temp.vcf.dta <- cbind(vcf.dta, NA_integer_)
+                      }else{
+                        temp.vcf.dta <- cbind(vcf.dta, integer(0))
+                      }
+                      
+                      names(temp.vcf.dta) <- c(names(vcf.dta), auto.col)
+                      return(temp.vcf.dta[,cur.cols])
+                  }
+                  else
+                  {
+                      nf.cols <- setdiff(cur.cols, colnames(vcf.dta))
+                      stop(paste("ERROR: Cannot find column(s)", paste(nf.cols, collapse=",")))
+                  }
             
         })
 
@@ -822,36 +827,43 @@ setReplaceMethod("constraint", signature("TableSchemaList"), function(obj, table
 		    
 		    if (missing(table.name) || is.null(table.name) || length(table.name) != 1  || is.na(table.name) || all(table.name %in% tables(obj))==F)
 		    {
-			stop("ERROR: please supply a single valid table for 'table.name'")
+			    stop("ERROR: please supply a single valid table for 'table.name'")
 		    }
 		    
 		    if (missing(constr.name) || is.null(constr.name))
 		    {
-			constr.name <- paste(table.name, "idx", sep="_")
+			    constr.name <- paste(table.name, "idx", sep="_")
 		    }
 		    
 		    if (length(should.ignore) != 1 || is.logical(should.ignore) == F)
 		    {
-			stop("ERROR: should.ignore should be a single logial value")
+			    stop("ERROR: should.ignore should be a single logial value")
 		    }
 		    
 		    if (is.null(value))
 		    {
 			
-			obj@tab.list[[table.name]]$db.constr <- ""
+			    obj@tab.list[[table.name]]$db.constr <- ""
 			
 		    }else{
-			cur.rhs <- .get.model.side(value, "right", num.components=2)
-		    
-			cur.rhs <- .resolve.rhs.fk(obj, cur.rhs, table.name)
-			
-			obj@tab.list[[table.name]]$db.constr <- paste("CONSTRAINT",constr.name,"UNIQUE (",paste(cur.rhs, collapse=","),")")
+			    cur.rhs <- .get.model.side(value, "right", num.components=2)
+		      
+			    if (length(cur.rhs) == 1 && cur.rhs == "."){
+			      #add in every column except for the primary key
+			      cur.rhs <- obj@tab.list[[table.name]]$db.cols[obj@tab.list[[table.name]]$db.schema != "INTEGER PRIMARY KEY AUTOINCREMENT"]
+			      
+			    }else{
+			      cur.rhs <- .resolve.rhs.fk(obj, cur.rhs, table.name)
+			    }
+			    
+			    obj@tab.list[[table.name]]$db.constr <- paste("CONSTRAINT",constr.name,"UNIQUE (",paste(cur.rhs, collapse=","),")")
 		    }
 		    
-                    obj@tab.list[[table.name]]$should.ignore <- should.ignore
+        obj@tab.list[[table.name]]$should.ignore <- should.ignore
 		    
 		    validObject(obj)
-                    return(obj)
+        
+		    return(obj)
 		    
 		 })
 
