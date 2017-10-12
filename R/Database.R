@@ -255,7 +255,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		
 		#now using dplyr::inner_join(x,y,by=NULL)
 		
-		src.db <- src_sqlite(dbFile(obj), create = F)
+		src.db <- dbConnect(RSQLite::SQLite(), dbFile(obj))
 		
 		if (is.null(names(needed.tables)))
 		{
@@ -394,7 +394,7 @@ setMethod("join", signature("Database"), function(obj, needed.tables)
 		
 	    }else{
 		
-		my_db <- src_sqlite(dbFile(obj), create = F)
+		my_db <- dbConnect(RSQLite::SQLite(), dbFile(obj))
 		
 		if (is.null(names(needed.tables))==F)
 		{
@@ -470,7 +470,7 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
         {
             if (should.debug) message("Creating database table")
             if (should.debug) message(createTable(db.schema, i, mode="normal"))
-            dbGetQuery(db.con, createTable(db.schema, i, mode="normal"))
+            dbClearResult(dbSendStatement(db.con, createTable(db.schema, i, mode="normal")))
         }
         
         #then merge with existing databases as necessary
@@ -485,7 +485,7 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
             }
             
             if (should.debug) message(createTable(db.schema, i, mode="merge"))
-            dbGetQuery(db.con, createTable(db.schema, i, mode="merge"))
+            dbClearResult(dbSendStatement(db.con, createTable(db.schema, i, mode="merge")))
             
             if (should.debug) message("Adding to temporary table")
             if (should.debug) message(insertStatement(db.schema, i, mode="merge"))
@@ -494,20 +494,21 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
             bind.data <- bindDataFunction(db.schema, i, ins.vals, mode="merge")
             
             if (nrow(bind.data) > 0){
+             
               dbBegin(db.con)
-              dbGetPreparedQuery(db.con, insertStatement(db.schema, i, mode="merge"), bind.data = bind.data)
+              suppressWarnings(dbGetPreparedQuery(db.con, insertStatement(db.schema, i, mode="merge"), bind.data = bind.data))
               dbCommit(db.con)
             }
             
             #merge from temporary into main table
             if (should.debug) message("Merging with existing table(s)")
             if (should.debug) message(mergeStatement(db.schema, i))
-            dbGetQuery(db.con, mergeStatement(db.schema, i))
+            dbClearResult(dbSendStatement(db.con, mergeStatement(db.schema, i)))
             
             #then also drop intermediate tables
             if (should.debug) message("Removing temporary table")
             if (should.debug) message(paste("DROP TABLE", tableName(db.schema, i, mode="merge")))
-            dbGetQuery(db.con, paste("DROP TABLE", tableName(db.schema, i, mode="merge")))
+            dbClearResult(dbSendStatement(db.con, paste("DROP TABLE", tableName(db.schema, i, mode="merge"))))
         }else
         {
             if (should.debug) message("Adding to database table")
@@ -516,10 +517,10 @@ setMethod("populate", signature("Database"), function(obj, ..., use.tables=NULL,
             
             bind.data <- bindDataFunction(db.schema, i, ins.vals)
             if (nrow(bind.data) > 0){
+              
               dbBegin(db.con)
-              dbGetPreparedQuery(db.con, insertStatement(db.schema, i), bind.data = bind.data)
+              suppressWarnings(dbGetPreparedQuery(db.con, insertStatement(db.schema, i), bind.data = bind.data))
               dbCommit(db.con)
-            
             }
         }
         

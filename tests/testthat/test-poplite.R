@@ -207,7 +207,7 @@ test_that("createTable",
     
     valid.tables <- names(tbsl@tab.list)
     
-    db.con <- dbConnect(SQLite(), tempfile())
+    db.con <- dbConnect(RSQLite::SQLite(), tempfile())
     
     for(i in valid.tables)
     {
@@ -310,7 +310,7 @@ test_that("insertStatement", {
     
     valid.tables <- names(tbsl@tab.list)
     
-    db.con <- dbConnect(SQLite(), tempfile())
+    db.con <- dbConnect(RSQLite::SQLite(), tempfile())
     
     for(i in valid.tables)
     {
@@ -458,7 +458,7 @@ test_that("Database population",{
     
     #read back in each of the tables and make sure they are consistent with in memory data.frames
     
-    test.con <- dbConnect(SQLite(), dbFile(baseball.db))
+    test.con <- dbConnect(RSQLite::SQLite(), dbFile(baseball.db))
     
     expect_true(all(names(ins.vals) %in% dbListTables(test.con)))
     
@@ -498,7 +498,7 @@ test_that("Database population",{
     
     #again read in the db tables
     
-    test.con <- dbConnect(SQLite(), dbFile(sample.tracking.db))
+    test.con <- dbConnect(RSQLite::SQLite(), dbFile(sample.tracking.db))
     
     expect_true(all(names(samp.list) %in% dbListTables(test.con)))
     
@@ -564,7 +564,7 @@ test_that("Querying with Database objects",
     #onto querying Database objects
     #sample.tracking.db
     
-    test.con <- dbConnect(SQLite(), dbFile(sample.tracking.db))
+    test.con <- dbConnect(RSQLite::SQLite(), dbFile(sample.tracking.db))
     
     #start with some basic select queries
     
@@ -572,6 +572,8 @@ test_that("Querying with Database objects",
            {
                 dbReadTable(test.con, x)
            })
+    
+    dbDisconnect(test.con)
     
     names(db.tab.list) <- tables(sample.tracking.db)
     
@@ -803,7 +805,7 @@ test_that("sample tracking example but with direct keys between dna and samples"
     #this query was seen to fail
     samp.dna.join <- select(temp.st.db, .tables=c("samples", "dna"))
     
-    test.con <- dbConnect(SQLite(), dbFile(temp.st.db))
+    test.con <- dbConnect(RSQLite::SQLite(), dbFile(temp.st.db))
     
     #start with some basic select queries
     
@@ -824,6 +826,7 @@ test_that("sample tracking example but with direct keys between dna and samples"
     
     expect_equal(samp.dna.merge, samp.dna.join, check.attributes=F)
     
+    dbDisconnect(test.con)
 })
 
 #igraph::plot.igraph(poplite:::tsl.to.graph(om.schema.obj))
@@ -836,7 +839,7 @@ test_that("oligoMask queries that break poplite", {
     
     test.db <- tempfile()
     
-    temp.con <- dbConnect(SQLite(), test.db)
+    temp.con <- dbConnect(RSQLite::SQLite(), test.db)
     
     for(i in names(test.db.2))
     {
