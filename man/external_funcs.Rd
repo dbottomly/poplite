@@ -10,7 +10,7 @@ These functions provide convienient interfaces to functionality provided in exte
 See the vignette and below examples.
 }
 \usage{
-filter(.data, \dots)
+filter(.data, \dots, .preserve = FALSE)
 select(.data, \dots,.tables=NULL)
 
 }
@@ -22,8 +22,11 @@ A \code{Database} object.
   \item{.tables}{
   	A character vector indicating the table(s) the specified columns refer to.
   }
+  \item{.preserve}{
+    Currently ignored.
+  }
   \item{\dots}{
-For \code{filter}, a single valid R expression which would result in a logical vector upon execution.  
+For \code{filter}, a single valid R expression which would result in a logical vector upon execution.
 For \code{select}, expression indicating the columns to choose from the given table(s).  See the examples
 in \code{dplyr::filter} and \code{dplyr::select}.  In addition, the names of the tables can be prepended to each 
 variable name similar to SQL statements (e.g. 'table.column').

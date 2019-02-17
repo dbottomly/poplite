@@ -211,10 +211,10 @@ test_that("createTable",
     
     for(i in valid.tables)
     {
-        print(i)
+        #print(i)
         for (j in c("normal", "merge"))
         {
-            print(j)
+            #print(j)
             
             f.keys <- tbsl@tab.list[[i]]$foreign.keys
             
@@ -314,10 +314,10 @@ test_that("insertStatement", {
     
     for(i in valid.tables)
     {
-        print(i)
+        #print(i)
         for(j in c("normal", "merge"))
         {
-            print(j)
+            #print(j)
             f.keys <- tbsl@tab.list[[i]]$foreign.keys
             
             if (j == "merge" && poplite:::shouldMerge(tbsl, i)==F)
@@ -381,7 +381,7 @@ test_that("mergeStatement",
         #again if there are no foreign keys make sure the query dies
         f.keys <- tbsl@tab.list[[i]]$foreign.keys
         
-        print(i)
+        #print(i)
         if (is.null(f.keys))
         {
             expect_error(mergeStatement(tbsl, i))
@@ -559,6 +559,7 @@ test_that("Database population",{
     assign(x="sample.tracking.db",  value=sample.tracking.db, envir=.GlobalEnv)
 })
 
+#remaining open connection...
 test_that("Querying with Database objects",
 {   
     #onto querying Database objects
@@ -585,6 +586,12 @@ test_that("Querying with Database objects",
     
     #the se version:
     
+    #Warning messages:
+    # 1: select_() is deprecated. 
+    # Please use select() instead
+    # 
+    # The 'programming' vignette or the tidyeval book can help you
+    # to program with select() : https://tidyeval.tidyverse.org
     all.samps.se <- select_(sample.tracking.db, .dots=list(.tables="samples"))
     expect_equal(as.data.frame(all.samps.se), db.samps)
     
@@ -718,7 +725,9 @@ test_that("Querying with Database objects",
     expect_equal(samp.1.df, db.samps[db.samps$sample_id == 1,])
     
     #standard eval version
-    
+    #Warning message:
+    # filter_() is deprecated. 
+    # Please use filter() instead
     samp.1.filt.se <- filter_(sample.tracking.db, "samples.sample_id == 1")
     samp.1.df.se <- as.data.frame(samp.1.filt.se)
     
