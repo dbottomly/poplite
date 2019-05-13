@@ -236,7 +236,7 @@ variant call format (VCF) file.  This type of file was devised to encode DNA var
 as well as other summary stats and annotations.  For more details, see the following specifications: \url{http://ga4gh.org/#/fileformats-team}. As parsing is already provided by the \texttt{VariantAnnotation} package \citep{Obenchain2014} in Bioconductor \citep{Gentleman2004}, we will focus on the population of a database
 using this data.  We will use the example dataset from the \texttt{VariantAnnotation} package and read it into memory as a \texttt{VCF} object as shown in the \texttt{VariantAnnotation} vignette.
 
-<<eval=TRUE, echo=FALSE>>=
+<<eval=FALSE, echo=FALSE>>=
 
 library(VariantAnnotation)
 fl <- system.file("extdata", "chr22.vcf.gz", package="VariantAnnotation")
@@ -247,7 +247,7 @@ The first table we will create is a representation of the chromosome, location a
 This function and a subset of the \texttt{VCF} object is passed to the \texttt{makeSchemaFromFunction} helper function.  What this helper function does is execute the desired function on the provided \texttt{VCF} object, determine the table structure
 from the returned \texttt{data.frame} and package the results in a \texttt{TableSchemaList} object.  It is important that the name(s) for the input objects match between the provided function, \texttt{makeSchemaFromFunction} and ultimately \texttt{populate}. 
 
-<<eval=TRUE, echo=TRUE>>=
+<<eval=FALSE, echo=TRUE>>=
 
 populate.ref.table <- function(vcf.obj)
 {
@@ -266,7 +266,7 @@ vcf.sc <- makeSchemaFromFunction(populate.ref.table, "reference", vcf.obj=vcf[1:
 
 Each variant position in our 'reference' table can have multiple alternatives (termed alleles) which were determined by the genotyping program which generated the VCF file.  The 'alleles' table can be formed as follows:
 
-<<eval=TRUE, echo=TRUE>>=
+<<eval=FALSE, echo=TRUE>>=
 
 populate.allele.table <- function(vcf.obj)
 {
@@ -291,7 +291,7 @@ Finally we can form a table that records the number of alternative alleles for e
 only contains one alternative allele for each variant.  Multi-alleleic cases would have to be dealt with differently as we would need to be sure that the appropriate allele was counted for each
 genotype.
 
-<<eval=TRUE, echo=TRUE>>=
+<<eval=FALSE, echo=TRUE>>=
 
 populate.samp.alt.table <- function(vcf.obj)
 {
@@ -322,7 +322,7 @@ relationship statement below will create a final 'alleles' table with the primar
 it has to be first joined with reference to retrieve its primary key, then joined with the new 'alleles' table to get 'alleles' primary key with the final table resembling: 'alt\_ind', 'sample' and 'allele\_count'.  Just as '.' on the left hand
 side indicates the primary key of the 'from' table the '.reference' variable indicates the primary key of the reference table.
 
-<<eval=TRUE, echo=TRUE>>=
+<<eval=FALSE, echo=TRUE>>=
 
 relationship(vcf.sc, from="reference", to="alleles") <- .~seqnames+start+end+ref
 
@@ -337,7 +337,7 @@ we will divide the \texttt{VCF} object into several pieces and populate them one
 the 'constraint<-' method is available to provide a mechanism to enforce uniqueness of a subset of columns for a given table which is especially useful if the database is being populated from many files
 which may have duplicate data.
 
-<<eval=TRUE, echo=TRUE>>=
+<<eval=FALSE, echo=TRUE>>=
 
 vcf.db <- Database(vcf.sc, tempfile())
 
@@ -346,28 +346,6 @@ populate(vcf.db, vcf.obj=vcf[1:1000])
 populate(vcf.db, vcf.obj=vcf[1001:2000])
 
 pop.res <- as.data.frame(poplite::select(vcf.db, .tables=tables(vcf.db)))
-
-vrange.tab <- as(vcf[1:2000], "VRanges")
-
-vrange.dta <- data.frame(seqnames=as.character(seqnames(vrange.tab)),
-                         start=start(vrange.tab),
-                         end=end(vrange.tab),
-                         ref=as.character(ref(vrange.tab)),
-                         alt=as.character(alt(vrange.tab)),
-                         sample=as.character(sampleNames(vrange.tab)),
-                         allele_count=sapply(strsplit(vrange.tab$GT, "\\|"),
-                                function(x) sum(as.integer(x), na.rm=T)),
-                         stringsAsFactors=F)
-
-vrange.dta <- vrange.dta[vrange.dta$allele_count > 0,]
-
-vrange.dta <- vrange.dta[do.call("order", vrange.dta),]
-
-sub.pop.res <- pop.res[,names(vrange.dta)]
-
-sub.pop.res <- sub.pop.res[do.call("order", sub.pop.res),]
-
-all.equal(sub.pop.res, vrange.dta, check.attributes=F)
 
 @
 

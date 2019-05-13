@@ -9,11 +9,25 @@ check.table.import <- function(dta, tbsl, name, pks=paste(name, "ind", sep="_"))
     
     #are the column types ok in a basic sense
     ##just removes autoincremented PKs
-    common.cols <- intersect(tbsl@tab.list[[name]]$db.cols, names(dta))
     
     tab.cols <- sapply(names(dta), function(x) class(dta[,x]))
     tab.cols <- toupper(tab.cols)
     tab.cols[tab.cols %in% c("CHARACTER", "FACTOR")] <- "TEXT"
+    
+    #just because its encoded as numeric in the df doesn't mean it should be...
+    actually.ints <- mapply(function(x,y){
+      
+      if (x == "NUMERIC"){
+        
+        isTRUE(all.equal(floor(y), y))
+        
+      }else{
+        F
+      }
+      
+    }, tab.cols, as.list(dta))
+    
+    tab.cols[actually.ints] <- "INTEGER"
     
     expect_identical(tab.cols, tbsl@tab.list[[name]]$db.schema[names(tab.cols)])
 }
@@ -895,4 +909,108 @@ test_that("oligoMask queries that break poplite", {
     
     
 })
+
+test_that("VariantAnnotation basic tests", {
+  
+  if (require("VariantAnnotation")==F) {
+    skip("VariantAnnotation not available")
+  }
+  
+  fl <- system.file("extdata", "chr22.vcf.gz", package="VariantAnnotation")
+  vcf <- tryCatch(readVcf(fl, "hg19"), error=function(x) skip("VariantAnnotation can't read its own file"))
+  
+  
+  populate.ref.table <- function(vcf.obj)
+  {
+    ref.dta <- cbind(
+      seqnames=as.character(seqnames(vcf.obj)),
+      as.data.frame(ranges(vcf.obj))[,c("start", "end")],
+      ref=as.character(ref(vcf.obj)),
+      stringsAsFactors=FALSE
+    )
+    return(ref.dta)
+  }
+  
+  vcf.sc <- makeSchemaFromFunction(populate.ref.table, "reference", vcf.obj=vcf[1:5])
+  
+  
+  populate.allele.table <- function(vcf.obj)
+  {
+    exp.obj <- expand(vcf.obj)
+    ref.dta <- cbind(
+      seqnames=as.character(seqnames(exp.obj)),
+      as.data.frame(ranges(exp.obj))[,c("start", "end")],
+      ref=as.character(ref(exp.obj)),
+      alt=as.character(alt(exp.obj)),
+      stringsAsFactors=FALSE
+    )
+    return(ref.dta)
+  }
+  
+  allele.sc <- makeSchemaFromFunction(populate.allele.table, "alleles", vcf.obj=vcf[1:5])
+  
+  vcf.sc <- poplite::append(vcf.sc, allele.sc)
+  
+  
+  populate.samp.alt.table <- function(vcf.obj)
+  {
+    temp.vrange <- as(vcf.obj, "VRanges")
+    
+    ret.dta <- cbind(
+      seqnames=as.character(seqnames(temp.vrange)),
+      as.data.frame(ranges(temp.vrange))[,c("start", "end")],
+      ref=ref(temp.vrange),
+      alt=alt(temp.vrange),
+      sample=as.character(sampleNames(temp.vrange)),
+      allele_count=sapply(strsplit(temp.vrange$GT, "\\|"),
+                          function(x) sum(as.integer(x), na.rm=T)),
+      stringsAsFactors=F
+    )
+    
+    return(ret.dta[ret.dta$allele_count > 0,])
+  }
+  
+  geno.all.sc <- makeSchemaFromFunction(populate.samp.alt.table, "sample_alleles", vcf.obj=vcf[1:5])
+  
+  vcf.sc <- poplite::append(vcf.sc, geno.all.sc)
+  
+  relationship(vcf.sc, from="reference", to="alleles") <- .~seqnames+start+end+ref
+  
+  relationship(vcf.sc, from="reference", to="sample_alleles") <- .~seqnames+start+end+ref
+  
+  relationship(vcf.sc, from="alleles", to="sample_alleles") <- .~.reference+alt
+  
+  vcf.db <- Database(vcf.sc, tempfile())
+  
+  populate(vcf.db, vcf.obj=vcf[1:1000])
+  
+  populate(vcf.db, vcf.obj=vcf[1001:2000])
+  
+  pop.res <- as.data.frame(poplite::select(vcf.db, .tables=tables(vcf.db)))
+  
+  vrange.tab <- as(vcf[1:2000], "VRanges")
+  
+  vrange.dta <- data.frame(seqnames=as.character(seqnames(vrange.tab)),
+                           start=start(vrange.tab),
+                           end=end(vrange.tab),
+                           ref=as.character(ref(vrange.tab)),
+                           alt=as.character(alt(vrange.tab)),
+                           sample=as.character(sampleNames(vrange.tab)),
+                           allele_count=sapply(strsplit(vrange.tab$GT, "\\|"),
+                                               function(x) sum(as.integer(x), na.rm=T)),
+                           stringsAsFactors=F)
+  
+  vrange.dta <- vrange.dta[vrange.dta$allele_count > 0,]
+  
+  vrange.dta <- vrange.dta[do.call("order", vrange.dta),]
+  
+  sub.pop.res <- pop.res[,names(vrange.dta)]
+  
+  sub.pop.res <- sub.pop.res[do.call("order", sub.pop.res),]
+  
+  expect_true(isTRUE(all.equal(sub.pop.res, vrange.dta, check.attributes=F)))
+  
+})
+
+
 
